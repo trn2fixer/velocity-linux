@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Unmute (-u) or restore (-r) ALSA mixers on the live medium.
+set -uo pipefail
+
+unmute_all() {
+  local card
+  for card in /proc/asound/card[0-9]*; do
+    local idx="${card##*card}"
+    amixer -c "${idx}" -q set Master 80% unmute 2>/dev/null || true
+    amixer -c "${idx}" -q set PCM 80% unmute 2>/dev/null || true
+    amixer -c "${idx}" -q set Speaker 80% unmute 2>/dev/null || true
+    amixer -c "${idx}" -q set Headphone 80% unmute 2>/dev/null || true
+  done
+}
+
+case "${1:-}" in
+  -u|--unmute) unmute_all ;;
+  -r|--restore) alsactl restore 2>/dev/null || true ;;
+  *) echo "usage: livecd-sound -u|-r" >&2; exit 1 ;;
+esac

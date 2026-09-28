@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Velocity Linux live welcome. Runs once on tty1 after autologin.
+set -uo pipefail
+
+V='\e[38;2;124;92;255m'   # violet
+C='\e[38;2;34;211;238m'   # cyan
+D='\e[38;2;140;140;160m'  # dim
+B='\e[1m'
+R='\e[0m'
+
+clear
+cat <<EOF
+
+$(printf "${V}")  ██╗   ██╗███████╗██╗      ██████╗  ██████╗██╗████████╗██╗   ██╗
+  ██║   ██║██╔════╝██║     ██╔═══██╗██╔════╝██║╚══██╔══╝╚██╗ ██╔╝
+  ██║   ██║█████╗  ██║     ██║   ██║██║     ██║   ██║    ╚████╔╝
+  ╚██╗ ██╔╝██╔══╝  ██║     ██║   ██║██║     ██║   ██║     ╚██╔╝
+   ╚████╔╝ ███████╗███████╗╚██████╔╝╚██████╗██║   ██║      ██║
+    ╚═══╝  ╚══════╝╚══════╝ ╚═════╝  ╚═════╝╚═╝   ╚═╝      ╚═╝$(printf "${R}")
+$(printf "${C}${B}")  Arch-based. Yours from the first boot.$(printf "${R}")
+
+$(printf "${D}")  Live session · root, no password · Wi-Fi: ${R}nmtui${D} or ${R}iwctl$(printf "${R}")
+
+  ${B}velocity-install${R}   Guided installer (disk, desktop, apps, theme)
+  ${B}velocity${R}           The customizer. Pick desktops, themes, app bundles.
+  ${B}velocity doctor${R}    Hardware and network check
+  ${B}Installation_guide${R} Manual install notes
+
+EOF
+# Show a compact hardware summary
+if command -v fastfetch >/dev/null 2>&1; then
+  fastfetch --logo none --structure "OS:Kernel:CPU:GPU:Memory:Disk" 2>/dev/null | sed 's/^/  /'
+  echo
+fi

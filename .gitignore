@@ -1,0 +1,16 @@
+# build outputs
+out/
+work/
+assets/out/
+*.iso
+*.pkg.tar.*
+SHA256SUMS
+
+# generated inside the profile during a build
+profile/airootfs/opt/velocity-repo/
+profile/syslinux/splash.png
+
+# misc
+*.log
+.DS_Store
+Thumbs.db

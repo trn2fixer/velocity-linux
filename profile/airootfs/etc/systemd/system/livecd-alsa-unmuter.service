@@ -1,0 +1,11 @@
+[Unit]
+Description=Unmute sound cards on the live medium
+After=alsa-restore.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/livecd-sound -u
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

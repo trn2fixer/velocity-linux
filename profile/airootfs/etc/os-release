@@ -1,0 +1,11 @@
+NAME="Velocity Linux"
+PRETTY_NAME="Velocity Linux"
+ID=velocity
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;124;92;255"
+HOME_URL="https://github.com/velocity-linux/velocity"
+DOCUMENTATION_URL="https://github.com/velocity-linux/velocity/tree/main/docs"
+SUPPORT_URL="https://github.com/velocity-linux/velocity/discussions"
+BUG_REPORT_URL="https://github.com/velocity-linux/velocity/issues"
+LOGO=velocity

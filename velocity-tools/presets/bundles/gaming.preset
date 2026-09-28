@@ -1,0 +1,28 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Gaming"
+DESC="Steam, Lutris, Heroic, gamemode, MangoHud, 32-bit Vulkan/Mesa. Pair with the nvidia bundle if needed."
+KIND="bundle"
+TAGS=(gaming)
+PACKAGES=(
+  steam lutris gamemode lib32-gamemode mangohud lib32-mangohud gamescope
+  wine-staging winetricks
+  vulkan-icd-loader lib32-vulkan-icd-loader
+  vulkan-radeon lib32-vulkan-radeon vulkan-intel lib32-vulkan-intel
+  lib32-mesa mesa-utils
+  lib32-pipewire lib32-alsa-plugins
+  discord
+)
+OPTIONAL=()
+SERVICES=()
+CONFLICTS=()
+
+post_apply() {
+  # multilib is required; make sure it is on.
+  local pc; pc="$(target_path /etc/pacman.conf)"
+  if ! grep -q '^\[multilib\]' "${pc}"; then
+    printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>"${pc}"
+    in_target pacman -Sy
+  fi
+  local u
+  for u in $(target_users); do in_target usermod -aG gamemode "${u}" 2>/dev/null || true; done
+}

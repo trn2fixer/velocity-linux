@@ -1,0 +1,14 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Flatpak"
+DESC="Flatpak with Flathub enabled, for apps not in the Arch repos (Spotify, Zoom, Slack…)."
+KIND="bundle"
+TAGS=(apps)
+PACKAGES=(flatpak xdg-desktop-portal)
+OPTIONAL=()
+SERVICES=()
+CONFLICTS=()
+
+post_apply() {
+  in_target flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || \
+    warn "could not add Flathub now (offline?). Run: flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
+}

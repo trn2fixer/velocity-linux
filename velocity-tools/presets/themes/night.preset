@@ -1,0 +1,87 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Night"
+DESC="Dark. Near-black surfaces, violet accent, cyan highlights. The default Velocity look."
+KIND="theme"
+TAGS=(dark default)
+PACKAGES=(papirus-icon-theme ttf-jetbrains-mono-nerd)
+OPTIONAL=()
+SERVICES=()
+CONFLICTS=()
+
+post_apply() {
+  local desktop; desktop="$(state_get desktop)"
+  local wall="/usr/share/backgrounds/velocity/wallpaper-night.png"
+
+  # GTK defaults (all desktops)
+  local gtk; gtk="$(target_path /etc/gtk-3.0)"; mkdir -p "${gtk}"
+  cat >"${gtk}/settings.ini" <<'EOF'
+[Settings]
+gtk-application-prefer-dark-theme=1
+gtk-theme-name=Adwaita-dark
+gtk-icon-theme-name=Papirus-Dark
+gtk-font-name=Noto Sans 11
+gtk-cursor-theme-name=Adwaita
+EOF
+  cp "${gtk}/settings.ini" "$(target_path /etc/gtk-4.0/settings.ini)" 2>/dev/null || { mkdir -p "$(target_path /etc/gtk-4.0)"; cp "${gtk}/settings.ini" "$(target_path /etc/gtk-4.0/settings.ini)"; }
+
+  case "${desktop}" in
+    gnome)
+      local d; d="$(target_path /etc/dconf/db/local.d)"; mkdir -p "${d}"
+      cat >"${d}/20-velocity-theme" <<EOF
+[org/gnome/desktop/interface]
+color-scheme='prefer-dark'
+accent-color='purple'
+icon-theme='Papirus-Dark'
+
+[org/gnome/desktop/background]
+picture-uri='file://${wall}'
+picture-uri-dark='file://${wall}'
+EOF
+      in_target dconf update || true ;;
+    plasma)
+      local skel; skel="$(target_path /etc/skel/.config)"; mkdir -p "${skel}"
+      cat >"${skel}/kdeglobals" <<'EOF'
+[General]
+ColorScheme=BreezeDark
+AccentColor=124,92,255
+
+[Icons]
+Theme=Papirus-Dark
+
+[KDE]
+LookAndFeelPackage=org.kde.breezedark.desktop
+EOF
+      ;;
+    hyprland)
+      # Swap the colour include the rice reads.
+      local u
+      for u in $(target_users); do
+        local h; h="$(user_home "${u}")"
+        [[ -d "${h}/.config/hypr" ]] || continue
+        cp -f "${VELOCITY_SHARE}/configs/hyprland/hypr/themes/night.conf" "${h}/.config/hypr/theme.conf"
+        printf 'preload = %s\nwallpaper = ,%s\n' "${wall}" "${wall}" >"${h}/.config/hypr/hyprpaper.conf"
+        cp -f "${VELOCITY_SHARE}/configs/hyprland/waybar/themes/night.css" "${h}/.config/waybar/theme.css"
+        cp -f "${VELOCITY_SHARE}/configs/hyprland/kitty/themes/night.conf" "${h}/.config/kitty/theme.conf"
+        chown -R "${u}:${u}" "${h}/.config" 2>/dev/null || true
+      done
+      local skel; skel="$(target_path /etc/skel/.config)"
+      [[ -d "${skel}/hypr" ]] && cp -f "${VELOCITY_SHARE}/configs/hyprland/hypr/themes/night.conf" "${skel}/hypr/theme.conf" ;;
+    xfce)
+      local skel; skel="$(target_path /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml)"; mkdir -p "${skel}"
+      cat >"${skel}/xsettings.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Arc-Dark"/>
+    <property name="IconThemeName" type="string" value="Papirus-Dark"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="FontName" type="string" value="Noto Sans 11"/>
+    <property name="MonospaceFontName" type="string" value="JetBrainsMono Nerd Font 11"/>
+  </property>
+</channel>
+EOF
+      ;;
+  esac
+  # Console/tty colours via starship stay the same in both themes.
+}

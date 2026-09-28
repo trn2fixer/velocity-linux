@@ -1,0 +1,9 @@
+post_install() {
+  mkdir -p /var/lib/velocity
+  # Branding is applied by the pacman hook; nothing to do here besides a hint.
+  echo "  Velocity tools installed. Run 'velocity' to customize, 'velocity doctor' to check hardware."
+}
+
+post_upgrade() {
+  post_install
+}

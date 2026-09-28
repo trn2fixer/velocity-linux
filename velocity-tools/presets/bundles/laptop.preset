@@ -1,0 +1,9 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Laptop"
+DESC="Battery life and touchpad tuning: power-profiles-daemon, thermald, libinput gestures."
+KIND="bundle"
+TAGS=(hardware laptop)
+PACKAGES=(power-profiles-daemon thermald libinput fprintd acpi acpid)
+OPTIONAL=()
+SERVICES=(power-profiles-daemon thermald acpid)
+CONFLICTS=(tlp)

@@ -1,0 +1,115 @@
+# Velocity Linux live ISO package list.
+# Philosophy: the live medium carries only what the installer and a rescue
+# session need. Desktops, apps and themes are chosen by the user and pulled
+# in by the installer / `velocity` customizer. One line per package.
+
+# --- kernel and base ---
+base
+linux
+linux-firmware
+amd-ucode
+intel-ucode
+mkinitcpio
+mkinitcpio-archiso
+mkinitcpio-nfs-utils
+memtest86+
+memtest86+-efi
+syslinux
+edk2-shell
+
+# --- firmware helpers ---
+sof-firmware
+alsa-utils
+
+# --- filesystems and disks ---
+btrfs-progs
+dosfstools
+e2fsprogs
+exfatprogs
+f2fs-tools
+xfsprogs
+ntfs-3g
+gptfdisk
+parted
+lvm2
+cryptsetup
+mdadm
+dmraid
+nvme-cli
+smartmontools
+hdparm
+sdparm
+
+# --- installer runtime ---
+arch-install-scripts
+archinstall
+pacman-contrib
+reflector
+dialog
+gum
+jq
+python
+git
+
+# --- network ---
+iwd
+networkmanager
+wireless-regdb
+wpa_supplicant
+openssh
+curl
+wget
+rsync
+bind
+ethtool
+modemmanager
+usb_modeswitch
+
+# --- shell and editors ---
+bash-completion
+zsh
+fish
+nano
+vim
+micro
+less
+man-db
+man-pages
+tmux
+fastfetch
+btop
+tree
+fzf
+ripgrep
+bat
+eza
+zoxide
+starship
+
+# --- hardware / tools ---
+pciutils
+usbutils
+lsscsi
+dmidecode
+terminus-font
+ttf-jetbrains-mono-nerd
+xdg-user-dirs
+bolt
+fwupd
+efibootmgr
+grub
+os-prober
+tpm2-tss
+tpm2-tools
+udisks2
+livecd-sounds
+sudo
+polkit
+
+# --- accessibility ---
+espeakup
+brltty
+
+# --- Velocity ---
+# velocity-tools is injected from the local repo built in scripts/build-iso.sh.
+velocity-tools

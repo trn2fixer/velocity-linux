@@ -1,0 +1,64 @@
+# Maintainer: Velocity Linux <velocity@example.invalid>
+# Built from the repo checkout by scripts/build-iso.sh (makepkg with $srcdir pointed at ../).
+
+pkgname=velocity-tools
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Velocity Linux customizer, installer, presets and branding"
+arch=('any')
+url="https://github.com/velocity-linux/velocity"
+license=('MIT')
+depends=(
+  'bash' 'coreutils' 'util-linux' 'pacman' 'pacman-contrib'
+  'arch-install-scripts' 'gum' 'jq' 'curl'
+  'btrfs-progs' 'dosfstools' 'gptfdisk' 'parted'
+  'grub' 'efibootmgr' 'os-prober'
+  'starship' 'fastfetch' 'eza' 'bat' 'zoxide'
+)
+optdepends=(
+  'reflector: mirror ranking during install'
+  'networkmanager: network setup in installed system'
+)
+install=velocity-tools.install
+# Sources come from the working tree; see build(). No remote sources.
+source=()
+sha256sums=()
+
+# The repo root is two levels above where makepkg runs (velocity-tools/PKGBUILD).
+_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+package() {
+  local t="${_repo}/velocity-tools"
+
+  install -Dm755 "${t}/bin/velocity"          "${pkgdir}/usr/bin/velocity"
+  install -Dm755 "${t}/bin/velocity-install"  "${pkgdir}/usr/bin/velocity-install"
+
+  install -d "${pkgdir}/usr/lib/velocity"
+  install -m644 "${t}"/lib/*.sh "${pkgdir}/usr/lib/velocity/"
+
+  # presets
+  install -d "${pkgdir}/usr/share/velocity/presets"
+  cp -r "${t}/presets/." "${pkgdir}/usr/share/velocity/presets/"
+
+  # shared configs, themes, wallpapers, shell defaults
+  install -d "${pkgdir}/usr/share/velocity"
+  cp -r "${t}/share/." "${pkgdir}/usr/share/velocity/"
+
+  # generated assets (wallpapers, grub background) if present
+  if [[ -d "${_repo}/assets/out" ]]; then
+    install -d "${pkgdir}/usr/share/velocity/wallpapers"
+    cp "${_repo}/assets/out"/wallpaper-*.png "${pkgdir}/usr/share/velocity/wallpapers/" 2>/dev/null || true
+    install -d "${pkgdir}/usr/share/velocity/grub/theme"
+    cp "${_repo}/assets/out/grub-background.png" "${pkgdir}/usr/share/velocity/grub/theme/background.png" 2>/dev/null || true
+  fi
+
+  # pacman hook
+  install -Dm644 "${t}/hooks/90-velocity-brand.hook" "${pkgdir}/usr/share/libalpm/hooks/90-velocity-brand.hook"
+
+  # license
+  install -Dm644 "${_repo}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+  # tidy: strip executable bit from data files
+  find "${pkgdir}/usr/share/velocity" -type f -exec chmod 644 {} +
+  find "${pkgdir}/usr/share/velocity" -type d -exec chmod 755 {} +
+}

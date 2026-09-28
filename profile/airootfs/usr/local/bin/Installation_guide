@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Manual installation notes for people who prefer the Arch way.
+less -R <<'EOF'
+Velocity Linux: manual install notes
+====================================
+
+Velocity is Arch Linux underneath. The Arch wiki installation guide applies
+verbatim (https://wiki.archlinux.org/title/Installation_guide). Differences:
+
+1. Bootstrap with the Velocity base set instead of plain `base`:
+     pacstrap -K /mnt base linux linux-firmware velocity-tools
+
+   `velocity-tools` provides the `velocity` customizer, the branding hook,
+   and the preset library. Everything else is optional.
+
+2. Inside the chroot, brand the system and pick a desktop:
+     velocity brand apply
+     velocity desktop set plasma      # or hyprland, gnome, xfce, core
+     velocity theme set night         # or day
+
+3. Bootloader: `velocity install-bootloader` wraps grub-install +
+   grub-mkconfig with the Velocity theme.
+
+Run `velocity-install` for the guided path that does all of this for you.
+EOF

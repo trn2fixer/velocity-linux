@@ -1,0 +1,31 @@
+# shellcheck shell=bash disable=SC2034
+NAME="NVIDIA drivers"
+DESC="Proprietary NVIDIA driver (open kernel modules, Turing+), 32-bit libs, Wayland-ready modeset."
+KIND="bundle"
+TAGS=(hardware gpu)
+PACKAGES=(
+  nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-settings
+  libva-nvidia-driver egl-wayland
+)
+OPTIONAL=()
+SERVICES=(nvidia-suspend nvidia-hibernate nvidia-resume)
+CONFLICTS=()
+
+post_apply() {
+  # DKMS needs headers for the installed kernel(s).
+  local k
+  for k in linux linux-lts linux-zen; do pac_installed "${k}" && pac_install "${k}-headers"; done
+  mkdir -p "$(target_path /etc/modprobe.d)"
+  printf 'options nvidia_drm modeset=1 fbdev=1\n' >"$(target_path /etc/modprobe.d/nvidia.conf)"
+  # early KMS
+  local mk; mk="$(target_path /etc/mkinitcpio.conf)"
+  if [[ -f "${mk}" ]] && ! grep -q 'nvidia_drm' "${mk}"; then
+    sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' "${mk}"
+    in_target mkinitcpio -P
+  fi
+  local g; g="$(target_path /etc/default/grub)"
+  if [[ -f "${g}" ]] && ! grep -q 'nvidia_drm.modeset' "${g}"; then
+    sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 nvidia_drm.modeset=1"/' "${g}"
+    in_target grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+  fi
+}

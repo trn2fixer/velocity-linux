@@ -1,0 +1,14 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Office"
+DESC="LibreOffice, Thunderbird, Okular/Evince-style PDF tools, fonts, printing."
+KIND="bundle"
+TAGS=(office)
+PACKAGES=(
+  libreoffice-fresh thunderbird
+  cups cups-pdf system-config-printer
+  ttf-liberation ttf-dejavu noto-fonts-cjk
+  hunspell hunspell-en_us
+)
+OPTIONAL=()
+SERVICES=(cups.socket avahi-daemon)
+CONFLICTS=()

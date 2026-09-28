@@ -1,0 +1,38 @@
+# shellcheck shell=bash disable=SC2034
+NAME="XFCE"
+DESC="Light, classic, dependable. Ideal for older hardware or people who like a taskbar."
+KIND="desktop"
+TAGS=(x11 light)
+SESSION="xfce"
+PACKAGES=(
+  xfce4 xfce4-whiskermenu-plugin xfce4-pulseaudio-plugin xfce4-notifyd xfce4-screenshooter
+  thunar-archive-plugin file-roller mousepad ristretto xfce4-taskmanager
+  lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings
+  network-manager-applet blueman
+  pipewire pipewire-pulse pipewire-alsa wireplumber pavucontrol
+  xorg-server xorg-xinit
+  papirus-icon-theme arc-gtk-theme
+  noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd
+  firefox
+)
+OPTIONAL=(
+  xfce4-clipman-plugin
+  xfce4-weather-plugin
+  galculator
+  gnome-disk-utility
+  parole
+)
+SERVICES=(lightdm bluetooth)
+CONFLICTS=(sddm gdm ly greetd)
+
+post_apply() {
+  local d; d="$(target_path /etc/lightdm)"
+  mkdir -p "${d}"
+  cat >"${d}/lightdm-gtk-greeter.conf" <<'EOF'
+[greeter]
+theme-name = Arc-Dark
+icon-theme-name = Papirus-Dark
+font-name = Noto Sans 11
+background = /usr/share/backgrounds/velocity/wallpaper-night.png
+EOF
+}

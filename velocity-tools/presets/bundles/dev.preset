@@ -1,0 +1,21 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Developer"
+DESC="Compilers, git tooling, containers, VS Code (OSS), neovim, Python/Node/Rust/Go."
+KIND="bundle"
+TAGS=(dev)
+PACKAGES=(
+  base-devel git github-cli lazygit neovim code
+  docker docker-compose docker-buildx
+  python python-pip python-pipx nodejs npm pnpm rustup go
+  jq yq fd ripgrep fzf httpie tokei hyperfine
+  shellcheck shfmt
+  meld
+)
+OPTIONAL=()
+SERVICES=(docker)
+CONFLICTS=()
+
+post_apply() {
+  local u
+  for u in $(target_users); do in_target usermod -aG docker "${u}" || true; done
+}

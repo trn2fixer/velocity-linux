@@ -1,0 +1,25 @@
+# Symlinks created inside profile/airootfs by scripts/build-iso.sh before mkarchiso runs.
+# Format:  <link path relative to airootfs>  <target>
+# Git on Windows does not store symlinks reliably, so they live here instead.
+
+# --- enabled services (equivalent of `systemctl enable`) ---
+etc/systemd/system/multi-user.target.wants/NetworkManager.service        /usr/lib/systemd/system/NetworkManager.service
+etc/systemd/system/multi-user.target.wants/iwd.service                   /usr/lib/systemd/system/iwd.service
+etc/systemd/system/multi-user.target.wants/pacman-init.service           /etc/systemd/system/pacman-init.service
+etc/systemd/system/multi-user.target.wants/etc-pacman.d-gnupg.mount      /etc/systemd/system/etc-pacman.d-gnupg.mount
+etc/systemd/system/multi-user.target.wants/reflector.service             /usr/lib/systemd/system/reflector.service
+etc/systemd/system/multi-user.target.wants/choose-mirror.service         /etc/systemd/system/choose-mirror.service
+etc/systemd/system/multi-user.target.wants/sshd.service                  /usr/lib/systemd/system/sshd.service
+etc/systemd/system/multi-user.target.wants/systemd-resolved.service      /usr/lib/systemd/system/systemd-resolved.service
+etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service /usr/lib/systemd/system/NetworkManager-wait-online.service
+etc/systemd/system/dbus-org.freedesktop.nm-dispatcher.service            /usr/lib/systemd/system/NetworkManager-dispatcher.service
+etc/systemd/system/dbus-org.freedesktop.resolve1.service                 /usr/lib/systemd/system/systemd-resolved.service
+etc/systemd/system/sysinit.target.wants/systemd-timesyncd.service        /usr/lib/systemd/system/systemd-timesyncd.service
+etc/systemd/system/sockets.target.wants/systemd-networkd.socket          /usr/lib/systemd/system/systemd-networkd.socket
+etc/systemd/system/sysinit.target.wants/livecd-alsa-unmuter.service      /etc/systemd/system/livecd-alsa-unmuter.service
+
+# --- resolv.conf handled by systemd-resolved stub ---
+etc/resolv.conf   /run/systemd/resolve/stub-resolv.conf
+
+# --- default shell config ---
+root/.zshrc       /etc/velocity/live/zshrc

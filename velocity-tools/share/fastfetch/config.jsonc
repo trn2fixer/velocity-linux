@@ -1,0 +1,33 @@
+// Velocity Linux fastfetch config
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "source": "/etc/velocity/logo.txt",
+    "type": "file",
+    "color": { "1": "38;2;124;92;255", "2": "38;2;34;211;238" },
+    "padding": { "top": 1, "right": 3 }
+  },
+  "display": {
+    "separator": "  ",
+    "color": { "keys": "38;2;34;211;238", "title": "38;2;124;92;255" }
+  },
+  "modules": [
+    { "type": "title", "format": "{user-name}@{host-name}" },
+    "separator",
+    { "type": "os", "key": "os" },
+    { "type": "kernel", "key": "kernel" },
+    { "type": "uptime", "key": "up" },
+    { "type": "packages", "key": "pkgs" },
+    { "type": "shell", "key": "shell" },
+    { "type": "de", "key": "de" },
+    { "type": "wm", "key": "wm" },
+    { "type": "terminal", "key": "term" },
+    "break",
+    { "type": "cpu", "key": "cpu" },
+    { "type": "gpu", "key": "gpu" },
+    { "type": "memory", "key": "mem" },
+    { "type": "disk", "key": "disk", "folders": "/" },
+    "break",
+    { "type": "colors", "symbol": "circle" }
+  ]
+}

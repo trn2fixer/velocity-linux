@@ -1,0 +1,40 @@
+# Velocity · dunst
+[global]
+    monitor = 0
+    follow = mouse
+    width = 360
+    height = 120
+    origin = top-right
+    offset = 16x56
+    frame_width = 2
+    frame_color = "#7c5cff"
+    corner_radius = 12
+    gap_size = 6
+    font = JetBrainsMono Nerd Font 11
+    format = "<b>%s</b>\n%b"
+    icon_position = left
+    max_icon_size = 48
+    enable_recursive_icon_lookup = true
+    icon_theme = Papirus-Dark
+    separator_color = frame
+    padding = 12
+    horizontal_padding = 14
+    idle_threshold = 120
+    mouse_left_click = do_action, close_current
+    mouse_right_click = close_all
+
+[urgency_low]
+    background = "#0b0b12"
+    foreground = "#8c8ca0"
+    timeout = 4
+
+[urgency_normal]
+    background = "#0b0b12"
+    foreground = "#e6e6f0"
+    timeout = 6
+
+[urgency_critical]
+    background = "#0b0b12"
+    foreground = "#f38ba8"
+    frame_color = "#f38ba8"
+    timeout = 0

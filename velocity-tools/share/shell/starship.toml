@@ -1,0 +1,62 @@
+# Velocity Linux Starship prompt
+"$schema" = 'https://starship.rs/config-schema.json'
+
+format = """
+[](fg:#7c5cff)\
+$os\
+$username\
+[](bg:#22d3ee fg:#7c5cff)\
+$directory\
+[](fg:#22d3ee bg:#1e1e2e)\
+$git_branch\
+$git_status\
+[](fg:#1e1e2e)\
+$fill\
+$cmd_duration\
+$line_break\
+$character"""
+
+add_newline = true
+
+[fill]
+symbol = " "
+
+[os]
+disabled = false
+style = "bg:#7c5cff fg:#0b0b12"
+format = "[ $symbol ]($style)"
+
+[os.symbols]
+Arch = "󰣇"
+Linux = "󰌽"
+
+[username]
+show_always = true
+style_user = "bg:#7c5cff fg:#0b0b12"
+style_root = "bg:#7c5cff fg:#0b0b12 bold"
+format = "[$user ]($style)"
+
+[directory]
+style = "bg:#22d3ee fg:#0b0b12"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[git_branch]
+symbol = ""
+style = "bg:#1e1e2e fg:#cdd6f4"
+format = "[ $symbol $branch ]($style)"
+
+[git_status]
+style = "bg:#1e1e2e fg:#f38ba8"
+format = "[$all_status$ahead_behind ]($style)"
+
+[cmd_duration]
+min_time = 2000
+style = "fg:#8c8ca0"
+format = "[ $duration]($style)"
+
+[character]
+success_symbol = "[❯](bold fg:#22d3ee)"
+error_symbol = "[❯](bold fg:#f38ba8)"
+vimcmd_symbol = "[❮](bold fg:#7c5cff)"

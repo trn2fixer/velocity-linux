@@ -1,0 +1,443 @@
+#!/usr/bin/env bash
+# velocity-install: guided installer for Velocity Linux.
+#
+#   velocity-install                 interactive
+#   velocity-install --config FILE   pre-seed answers from a bash file (see docs/unattended.md)
+#   velocity-install --dry-run       walk through the questions, print the plan, change nothing
+#
+# Layout it creates (wipe mode, GPT):
+#   UEFI:  1 GiB ESP (FAT32, /boot)  +  btrfs root (@ @home @snapshots @log @pkg), optional LUKS2
+#   BIOS:  1 MiB bios_grub           +  btrfs root (same subvolumes), optional LUKS2
+# Swap: zram (no swap partition).
+
+set -euo pipefail
+
+VELOCITY_LIB="${VELOCITY_LIB:-/usr/lib/velocity}"
+# shellcheck disable=SC1091
+source "${VELOCITY_LIB}/common.sh"
+# shellcheck disable=SC1091
+source "${VELOCITY_LIB}/presets.sh"
+
+TARGET=/mnt
+DRY_RUN=0
+CONFIG=""
+LOCAL_REPO="/opt/velocity-repo"          # placed on the ISO by scripts/build-iso.sh
+PACSTRAP_CONF="/etc/velocity/pacstrap.conf"
+
+# ---------- answers (may be pre-seeded via --config) ----------
+V_KEYMAP="${V_KEYMAP:-us}"
+V_LOCALE="${V_LOCALE:-en_US.UTF-8}"
+V_TIMEZONE="${V_TIMEZONE:-}"
+V_HOSTNAME="${V_HOSTNAME:-velocity}"
+V_USER="${V_USER:-}"
+V_USER_PASS="${V_USER_PASS:-}"
+V_ROOT_PASS="${V_ROOT_PASS:-}"          # empty -> root login disabled, sudo via wheel
+V_DISK="${V_DISK:-}"
+V_DISK_MODE="${V_DISK_MODE:-wipe}"       # wipe | manual
+V_ROOT_PART="${V_ROOT_PART:-}"           # manual mode
+V_EFI_PART="${V_EFI_PART:-}"             # manual mode (UEFI)
+V_ENCRYPT="${V_ENCRYPT:-no}"             # yes | no
+V_LUKS_PASS="${V_LUKS_PASS:-}"
+V_DESKTOP="${V_DESKTOP:-}"
+V_DESKTOP_WITH="${V_DESKTOP_WITH:-}"     # comma list of optional extras
+V_BUNDLES="${V_BUNDLES:-}"               # space list
+V_THEME="${V_THEME:-night}"
+V_SHELL="${V_SHELL:-zsh}"
+V_KERNEL="${V_KERNEL:-linux}"            # linux | linux-lts | linux-zen
+V_MICROCODE=""
+V_UEFI=0
+
+# ---------- helpers ----------
+run() { # run cmd... (respects dry-run)
+  if [[ ${DRY_RUN} -eq 1 ]]; then dim "  \$ $*"; else "$@"; fi
+}
+
+cleanup() {
+  [[ ${DRY_RUN} -eq 1 ]] && return 0
+  umount -R "${TARGET}" 2>/dev/null || true
+  [[ -e /dev/mapper/cryptroot ]] && cryptsetup close cryptroot 2>/dev/null || true
+}
+
+fail() {
+  err "$*"
+  err "log: ${VELOCITY_LOG}"
+  cleanup
+  exit 1
+}
+trap 'fail "installer aborted at line ${LINENO}"' ERR
+
+part_path() { # part_path /dev/nvme0n1 2 -> /dev/nvme0n1p2 ; /dev/sda 2 -> /dev/sda2
+  local disk="$1" n="$2"
+  if [[ "${disk}" =~ [0-9]$ ]]; then printf '%sp%s\n' "${disk}" "${n}"; else printf '%s%s\n' "${disk}" "${n}"; fi
+}
+
+disk_menu_entries() {
+  lsblk -dpno NAME,SIZE,MODEL,TRAN,TYPE | awk '$NF=="disk" && $1 !~ /loop|sr|zram/ {
+    model=""; for(i=3;i<NF-1;i++) model=model" "$i; printf "%s  %s %s (%s)\n",$1,$2,model,$(NF-1)}'
+}
+
+# ---------- preflight ----------
+preflight() {
+  need_root
+  [[ -d /sys/firmware/efi ]] && V_UEFI=1
+  if grep -qi intel /proc/cpuinfo; then V_MICROCODE=intel-ucode
+  elif grep -qi amd /proc/cpuinfo; then V_MICROCODE=amd-ucode; fi
+
+  hdr "Preflight"
+  ok "firmware: $([[ ${V_UEFI} -eq 1 ]] && echo UEFI || echo BIOS)"
+  if ! curl -fsI --max-time 6 https://archlinux.org >/dev/null 2>&1; then
+    warn "no internet. Connect first: nmtui (Wi-Fi/Ethernet) or iwctl"
+    if ui_confirm "Open nmtui now?"; then nmtui; fi
+    curl -fsI --max-time 6 https://archlinux.org >/dev/null 2>&1 || die "still offline; aborting"
+  fi
+  ok "internet reachable"
+  timedatectl set-ntp true >/dev/null 2>&1 || true
+  [[ -d "${LOCAL_REPO}" ]] && ok "local velocity repo found" || warn "no local repo at ${LOCAL_REPO}; velocity-tools will come from the live package cache"
+}
+
+# ---------- questions ----------
+ask_region() {
+  hdr "Region"
+  if [[ -z "${V_TIMEZONE}" ]]; then
+    local guess
+    guess="$(curl -fs --max-time 4 https://ipapi.co/timezone 2>/dev/null || echo "UTC")"
+    V_TIMEZONE="$(ui_input "Timezone (Region/City):" "${guess}")"
+    [[ -f "/usr/share/zoneinfo/${V_TIMEZONE}" ]] || { warn "unknown timezone, using UTC"; V_TIMEZONE="UTC"; }
+  fi
+  [[ -n "${CONFIG}" ]] || V_KEYMAP="$(ui_input "Console keymap:" "${V_KEYMAP}")"
+  [[ -n "${CONFIG}" ]] || V_LOCALE="$(ui_input "Locale:" "${V_LOCALE}")"
+}
+
+ask_disk() {
+  hdr "Disk"
+  if [[ -z "${V_DISK}" ]]; then
+    local entries; mapfile -t entries < <(disk_menu_entries)
+    [[ ${#entries[@]} -gt 0 ]] || die "no disks found"
+    local pick; pick="$(ui_choose "Install to which disk?" "${entries[@]}")"
+    V_DISK="${pick%% *}"
+  fi
+  [[ -b "${V_DISK}" ]] || die "not a block device: ${V_DISK}"
+
+  if [[ -z "${CONFIG}" ]]; then
+    local mode
+    mode="$(ui_choose "Partitioning:" \
+      "Wipe ${V_DISK} and use the whole disk (recommended)" \
+      "Manual: I already partitioned; pick root (and EFI) partitions")"
+    [[ "${mode}" == Wipe* ]] && V_DISK_MODE=wipe || V_DISK_MODE=manual
+  fi
+
+  if [[ "${V_DISK_MODE}" == "manual" ]]; then
+    local parts; mapfile -t parts < <(lsblk -pno NAME,SIZE,FSTYPE "${V_DISK}" | tail -n +2)
+    [[ -n "${V_ROOT_PART}" ]] || { local p; p="$(ui_choose "Root partition (will be formatted btrfs):" "${parts[@]}")"; V_ROOT_PART="${p%% *}"; }
+    if [[ ${V_UEFI} -eq 1 && -z "${V_EFI_PART}" ]]; then
+      local p; p="$(ui_choose "EFI partition (FAT32, will NOT be formatted if it already has files):" "${parts[@]}")"; V_EFI_PART="${p%% *}"
+    fi
+  fi
+
+  if [[ -z "${CONFIG}" ]]; then
+    if ui_confirm "Encrypt the root partition with LUKS2?"; then V_ENCRYPT=yes; else V_ENCRYPT=no; fi
+  fi
+  if [[ "${V_ENCRYPT}" == "yes" && -z "${V_LUKS_PASS}" ]]; then
+    while :; do
+      V_LUKS_PASS="$(ui_password "Disk passphrase:")"
+      local again; again="$(ui_password "Repeat:")"
+      [[ -n "${V_LUKS_PASS}" && "${V_LUKS_PASS}" == "${again}" ]] && break
+      warn "passphrases differ or empty"
+    done
+  fi
+}
+
+ask_identity() {
+  hdr "Identity"
+  [[ -n "${CONFIG}" ]] || V_HOSTNAME="$(ui_input "Hostname:" "${V_HOSTNAME}")"
+  while [[ -z "${V_USER}" || ! "${V_USER}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; do
+    V_USER="$(ui_input "Your username (lowercase):")"
+  done
+  if [[ -z "${V_USER_PASS}" ]]; then
+    while :; do
+      V_USER_PASS="$(ui_password "Password for ${V_USER}:")"
+      local again; again="$(ui_password "Repeat:")"
+      [[ -n "${V_USER_PASS}" && "${V_USER_PASS}" == "${again}" ]] && break
+      warn "passwords differ or empty"
+    done
+  fi
+  if [[ -z "${CONFIG}" ]]; then
+    if ui_confirm "Set a separate root password? (No = root login disabled, use sudo)"; then
+      V_ROOT_PASS="$(ui_password "Root password:")"
+    fi
+  fi
+}
+
+ask_software() {
+  hdr "Software"
+  if [[ -z "${V_KERNEL}" || -z "${CONFIG}" ]]; then
+    V_KERNEL="$(ui_choose "Kernel:" linux linux-lts linux-zen)"
+  fi
+  if [[ -z "${V_DESKTOP}" ]]; then
+    local ids=() labels=() id
+    for id in $(preset_ids desktop); do
+      preset_load desktop "${id}"; ids+=("${id}"); labels+=("${id}  ·  ${DESC}")
+    done
+    local pick; pick="$(ui_choose "Desktop:" "${labels[@]}")"
+    V_DESKTOP="${pick%% *}"
+  fi
+  if [[ -z "${CONFIG}" ]]; then
+    preset_load desktop "${V_DESKTOP}"
+    if [[ ${#OPTIONAL[@]} -gt 0 ]]; then
+      local extra; mapfile -t extra < <(ui_multi "Optional extras for ${NAME}:" "${OPTIONAL[@]}")
+      V_DESKTOP_WITH="$(IFS=,; echo "${extra[*]}")"
+    fi
+    local bids=() blabels=()
+    for id in $(preset_ids bundle); do
+      preset_load bundle "${id}"; bids+=("${id}"); blabels+=("${id}  ·  ${DESC}")
+    done
+    local sel; mapfile -t sel < <(ui_multi "App bundles (space to select, none is fine):" "${blabels[@]}")
+    V_BUNDLES="$(for s in "${sel[@]}"; do printf '%s ' "${s%% *}"; done)"
+    V_THEME="$(ui_choose "Theme:" $(preset_ids theme))"
+    V_SHELL="$(ui_choose "Shell:" zsh fish bash)"
+  fi
+}
+
+summary() {
+  hdr "Plan"
+  cat <<EOF
+  Disk        ${V_DISK}  (${V_DISK_MODE}$( [[ "${V_ENCRYPT}" == yes ]] && echo ", LUKS2 encrypted"))
+$( [[ "${V_DISK_MODE}" == manual ]] && printf '  Root part   %s\n  EFI part    %s\n' "${V_ROOT_PART}" "${V_EFI_PART:-n/a}")
+  Firmware    $([[ ${V_UEFI} -eq 1 ]] && echo UEFI || echo BIOS)
+  Kernel      ${V_KERNEL} ${V_MICROCODE:+(+${V_MICROCODE})}
+  Hostname    ${V_HOSTNAME}
+  User        ${V_USER} (sudo)   root login: $([[ -n "${V_ROOT_PASS}" ]] && echo enabled || echo disabled)
+  Timezone    ${V_TIMEZONE}    Locale ${V_LOCALE}    Keymap ${V_KEYMAP}
+  Desktop     ${V_DESKTOP}${V_DESKTOP_WITH:+ +${V_DESKTOP_WITH}}
+  Bundles     ${V_BUNDLES:-none}
+  Theme       ${V_THEME}       Shell ${V_SHELL}
+EOF
+  if [[ "${V_DISK_MODE}" == "wipe" ]]; then
+    printf '\n%s%sEVERYTHING ON %s WILL BE ERASED.%s\n' "${C_BOLD}" "${C_RED}" "${V_DISK}" "${C_RESET}"
+  else
+    printf '\n%s%s%s will be formatted.%s\n' "${C_BOLD}" "${C_RED}" "${V_ROOT_PART}" "${C_RESET}"
+  fi
+  [[ ${DRY_RUN} -eq 1 ]] && { ok "dry run: stopping here"; exit 0; }
+  ui_confirm "Install Velocity Linux now?" || die "cancelled"
+  if [[ "${V_DISK_MODE}" == "wipe" ]]; then
+    local typed; typed="$(ui_input "Type the disk name to confirm (${V_DISK##*/}):")"
+    [[ "${typed}" == "${V_DISK##*/}" ]] || die "confirmation did not match"
+  fi
+}
+
+# ---------- do it ----------
+ROOT_DEV=""   # device that holds btrfs (partition or /dev/mapper/cryptroot)
+ROOT_PART=""  # underlying partition (for cryptdevice=UUID=)
+EFI_PART=""
+
+do_partition() {
+  hdr "Partitioning"
+  if [[ "${V_DISK_MODE}" == "wipe" ]]; then
+    run wipefs -af "${V_DISK}"
+    run sgdisk --zap-all "${V_DISK}"
+    if [[ ${V_UEFI} -eq 1 ]]; then
+      run sgdisk -n 1:0:+1G  -t 1:ef00 -c 1:"VELOCITY_EFI"  "${V_DISK}"
+      run sgdisk -n 2:0:0    -t 2:8300 -c 2:"VELOCITY_ROOT" "${V_DISK}"
+      EFI_PART="$(part_path "${V_DISK}" 1)"
+      ROOT_PART="$(part_path "${V_DISK}" 2)"
+    else
+      run sgdisk -n 1:0:+1M  -t 1:ef02 -c 1:"BIOS_GRUB"     "${V_DISK}"
+      run sgdisk -n 2:0:0    -t 2:8300 -c 2:"VELOCITY_ROOT" "${V_DISK}"
+      ROOT_PART="$(part_path "${V_DISK}" 2)"
+    fi
+    run partprobe "${V_DISK}"; sleep 2
+  else
+    ROOT_PART="${V_ROOT_PART}"
+    EFI_PART="${V_EFI_PART}"
+  fi
+
+  if [[ "${V_ENCRYPT}" == "yes" ]]; then
+    log "setting up LUKS2 on ${ROOT_PART}"
+    printf '%s' "${V_LUKS_PASS}" | run cryptsetup luksFormat --type luks2 --batch-mode "${ROOT_PART}" -
+    printf '%s' "${V_LUKS_PASS}" | run cryptsetup open "${ROOT_PART}" cryptroot -
+    ROOT_DEV=/dev/mapper/cryptroot
+  else
+    ROOT_DEV="${ROOT_PART}"
+  fi
+
+  log "formatting"
+  run mkfs.btrfs -f -L velocity "${ROOT_DEV}"
+  if [[ ${V_UEFI} -eq 1 ]]; then
+    if [[ "${V_DISK_MODE}" == "wipe" ]] || ! blkid -o value -s TYPE "${EFI_PART}" | grep -q vfat; then
+      run mkfs.fat -F32 -n VELOCITY_EFI "${EFI_PART}"
+    fi
+  fi
+
+  log "creating subvolumes"
+  run mount "${ROOT_DEV}" "${TARGET}"
+  local sv
+  for sv in @ @home @snapshots @log @pkg; do run btrfs subvolume create "${TARGET}/${sv}"; done
+  run umount "${TARGET}"
+
+  local o="noatime,compress=zstd:3,space_cache=v2,discard=async"
+  run mount -o "${o},subvol=@" "${ROOT_DEV}" "${TARGET}"
+  run mkdir -p "${TARGET}"/{home,.snapshots,var/log,var/cache/pacman/pkg,boot}
+  run mount -o "${o},subvol=@home"      "${ROOT_DEV}" "${TARGET}/home"
+  run mount -o "${o},subvol=@snapshots" "${ROOT_DEV}" "${TARGET}/.snapshots"
+  run mount -o "${o},subvol=@log"       "${ROOT_DEV}" "${TARGET}/var/log"
+  run mount -o "${o},subvol=@pkg"       "${ROOT_DEV}" "${TARGET}/var/cache/pacman/pkg"
+  [[ ${V_UEFI} -eq 1 ]] && run mount "${EFI_PART}" "${TARGET}/boot"
+  ok "filesystems ready"
+}
+
+do_pacstrap() {
+  hdr "Installing base system"
+  # Refresh mirrors quickly (best effort).
+  if has reflector; then
+    ui_spin "ranking mirrors" reflector --protocol https --latest 20 --sort rate --save /etc/pacman.d/mirrorlist || true
+  fi
+  local pkgs=(base base-devel "${V_KERNEL}" "${V_KERNEL}-headers" linux-firmware btrfs-progs
+              networkmanager sudo zram-generator
+              grub efibootmgr os-prober
+              velocity-tools "${V_SHELL}")
+  [[ -n "${V_MICROCODE}" ]] && pkgs+=("${V_MICROCODE}")
+  [[ "${V_ENCRYPT}" == "yes" ]] && pkgs+=(cryptsetup)
+
+  # Use a pacman.conf that knows the on-ISO velocity repo so pacstrap can pull velocity-tools.
+  local conf=/etc/pacman.conf
+  if [[ -d "${LOCAL_REPO}" ]]; then
+    mkdir -p "$(dirname "${PACSTRAP_CONF}")"
+    { cat /etc/pacman.conf; printf '\n[velocity]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "${LOCAL_REPO}"; } >"${PACSTRAP_CONF}"
+    conf="${PACSTRAP_CONF}"
+  fi
+  run pacstrap -K -C "${conf}" "${TARGET}" "${pkgs[@]}"
+  run genfstab -U "${TARGET}" >>"${TARGET}/etc/fstab"
+  # Keep the target's pacman.conf clean (no file:// repo that will not exist after reboot).
+  run cp /etc/pacman.conf "${TARGET}/etc/pacman.conf"
+  ok "base installed"
+}
+
+do_configure() {
+  hdr "Configuring"
+  local ch=(arch-chroot "${TARGET}")
+
+  run ln -sf "/usr/share/zoneinfo/${V_TIMEZONE}" "${TARGET}/etc/localtime"
+  run "${ch[@]}" hwclock --systohc
+
+  run sed -i "s/^#\(${V_LOCALE//./\\.} UTF-8\)/\1/" "${TARGET}/etc/locale.gen"
+  grep -q "^${V_LOCALE} UTF-8" "${TARGET}/etc/locale.gen" || echo "${V_LOCALE} UTF-8" >>"${TARGET}/etc/locale.gen"
+  run "${ch[@]}" locale-gen
+  echo "LANG=${V_LOCALE}" >"${TARGET}/etc/locale.conf"
+  echo "KEYMAP=${V_KEYMAP}" >"${TARGET}/etc/vconsole.conf"
+
+  echo "${V_HOSTNAME}" >"${TARGET}/etc/hostname"
+  cat >"${TARGET}/etc/hosts" <<EOF
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   ${V_HOSTNAME}.localdomain ${V_HOSTNAME}
+EOF
+
+  # users
+  run "${ch[@]}" useradd -m -G wheel,audio,video,input,storage -s "/usr/bin/${V_SHELL}" "${V_USER}"
+  printf '%s:%s\n' "${V_USER}" "${V_USER_PASS}" | run "${ch[@]}" chpasswd
+  if [[ -n "${V_ROOT_PASS}" ]]; then
+    printf 'root:%s\n' "${V_ROOT_PASS}" | run "${ch[@]}" chpasswd
+  else
+    run "${ch[@]}" passwd -l root
+  fi
+  echo '%wheel ALL=(ALL:ALL) ALL' >"${TARGET}/etc/sudoers.d/10-wheel"
+  chmod 440 "${TARGET}/etc/sudoers.d/10-wheel"
+
+  # zram swap: half of RAM, capped at 8G
+  cat >"${TARGET}/etc/systemd/zram-generator.conf" <<'EOF'
+[zram0]
+zram-size = min(ram / 2, 8192)
+compression-algorithm = zstd
+EOF
+
+  # network + time
+  run systemctl --root="${TARGET}" enable NetworkManager systemd-timesyncd fstrim.timer
+
+  # sshd hardened if present
+  mkdir -p "${TARGET}/etc/ssh/sshd_config.d"
+  printf 'PermitRootLogin no\nPasswordAuthentication yes\n' >"${TARGET}/etc/ssh/sshd_config.d/10-velocity.conf"
+
+  # initramfs: encryption hook + kernel cmdline
+  if [[ "${V_ENCRYPT}" == "yes" ]]; then
+    run sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block encrypt filesystems fsck)/' "${TARGET}/etc/mkinitcpio.conf"
+    local uuid; uuid="$(blkid -o value -s UUID "${ROOT_PART}")"
+    run sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID=${uuid}:cryptroot root=/dev/mapper/cryptroot\"|" "${TARGET}/etc/default/grub"
+    run sed -i 's/^#\?GRUB_ENABLE_CRYPTODISK=.*/GRUB_ENABLE_CRYPTODISK=y/' "${TARGET}/etc/default/grub"
+    grep -q '^GRUB_ENABLE_CRYPTODISK' "${TARGET}/etc/default/grub" || echo 'GRUB_ENABLE_CRYPTODISK=y' >>"${TARGET}/etc/default/grub"
+  fi
+  run sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet splash"/' "${TARGET}/etc/default/grub"
+  run "${ch[@]}" mkinitcpio -P
+  ok "system configured"
+}
+
+do_presets() {
+  hdr "Desktop, apps, theme"
+  # Everything below runs the same customizer users get after install, pointed at /mnt.
+  local v=(velocity --root "${TARGET}")
+  run "${v[@]}" brand apply
+  if [[ -n "${V_DESKTOP_WITH}" ]]; then
+    run "${v[@]}" desktop set "${V_DESKTOP}" --with "${V_DESKTOP_WITH}"
+  else
+    run "${v[@]}" desktop set "${V_DESKTOP}" --no-optional
+  fi
+  # shellcheck disable=SC2086
+  [[ -n "${V_BUNDLES// /}" ]] && run "${v[@]}" bundle add ${V_BUNDLES}
+  run "${v[@]}" theme set "${V_THEME}" --no-optional
+  run "${v[@]}" shell set "${V_SHELL}" --user "${V_USER}"
+  ok "presets applied"
+}
+
+do_bootloader() {
+  hdr "Bootloader"
+  if [[ ${V_UEFI} -eq 1 ]]; then
+    run velocity --root "${TARGET}" install-bootloader --efi-dir /boot
+  else
+    run velocity --root "${TARGET}" install-bootloader --disk "${V_DISK}"
+  fi
+}
+
+do_finish() {
+  hdr "Done"
+  # First-boot snapshot so users have a pristine restore point.
+  btrfs subvolume snapshot -r "${TARGET}" "${TARGET}/.snapshots/velocity-fresh-install" >/dev/null 2>&1 || true
+  cp "${VELOCITY_LOG}" "${TARGET}/var/log/velocity-install.log" 2>/dev/null || true
+  cleanup
+  ui_banner
+  ok "Velocity Linux is installed on ${V_DISK}."
+  dim "  Remove the USB stick, then reboot. Log in as ${V_USER}."
+  dim "  Later: run 'velocity' to switch desktops, add bundles, change themes."
+  if ui_confirm "Reboot now?"; then reboot; fi
+}
+
+# ---------- main ----------
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --config) CONFIG="$2"; shift 2 ;;
+      --dry-run) DRY_RUN=1; shift ;;
+      -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+      *) die "unknown option: $1" ;;
+    esac
+  done
+  if [[ -n "${CONFIG}" ]]; then
+    [[ -r "${CONFIG}" ]] || die "cannot read ${CONFIG}"
+    # shellcheck disable=SC1090
+    source "${CONFIG}"
+  fi
+
+  clear; ui_banner
+  preflight
+  ask_region
+  ask_disk
+  ask_identity
+  ask_software
+  summary
+  do_partition
+  do_pacstrap
+  do_configure
+  do_presets
+  do_bootloader
+  do_finish
+}
+
+main "$@"

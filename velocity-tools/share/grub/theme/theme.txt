@@ -1,0 +1,67 @@
+# Velocity Linux GRUB theme
+desktop-image: "background.png"
+desktop-color: "#0b0b12"
+title-text: ""
+terminal-font: "Unifont Regular 16"
+terminal-box: "terminal_box_*.png"
+
++ label {
+  top = 12%
+  left = 0
+  width = 100%
+  align = "center"
+  color = "#7c5cff"
+  font = "Unifont Regular 16"
+  text = "V E L O C I T Y"
+}
+
++ label {
+  top = 12%+24
+  left = 0
+  width = 100%
+  align = "center"
+  color = "#8c8ca0"
+  font = "Unifont Regular 16"
+  text = "Arch-based. Yours from the first boot."
+}
+
++ boot_menu {
+  left = 25%
+  width = 50%
+  top = 35%
+  height = 40%
+  item_font = "Unifont Regular 16"
+  item_color = "#e6e6f0"
+  selected_item_color = "#0b0b12"
+  selected_item_pixmap_style = "select_*.png"
+  item_height = 32
+  item_padding = 8
+  item_spacing = 6
+  icon_width = 0
+  icon_height = 0
+}
+
++ progress_bar {
+  id = "__timeout__"
+  left = 25%
+  width = 50%
+  top = 80%
+  height = 18
+  show_text = true
+  font = "Unifont Regular 16"
+  text_color = "#8c8ca0"
+  fg_color = "#22d3ee"
+  bg_color = "#1e1e2e"
+  border_color = "#1e1e2e"
+  text = "@TIMEOUT_NOTIFICATION_SHORT@"
+}
+
++ label {
+  top = 92%
+  left = 0
+  width = 100%
+  align = "center"
+  color = "#8c8ca0"
+  font = "Unifont Regular 16"
+  text = "↑↓ select   Enter boot   e edit   c console"
+}

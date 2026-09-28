@@ -1,0 +1,4 @@
+# Everything text is LF. Scripts written on Windows must still run on Linux.
+* text=auto eol=lf
+*.png binary
+*.ico binary

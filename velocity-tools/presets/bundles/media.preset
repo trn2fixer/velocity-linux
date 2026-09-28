@@ -1,0 +1,15 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Media"
+DESC="Codecs, hardware video acceleration, mpv, VLC, Spotify-ready (via flatpak bundle)."
+KIND="bundle"
+TAGS=(media)
+PACKAGES=(
+  mpv vlc
+  gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
+  ffmpeg
+  libva-utils intel-media-driver libva-intel-driver libva-mesa-driver mesa-vdpau
+  yt-dlp
+)
+OPTIONAL=()
+SERVICES=()
+CONFLICTS=()

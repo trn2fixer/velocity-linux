@@ -1,0 +1,24 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Core"
+DESC="No desktop. A branded, tidy terminal system. Add a desktop any time with 'velocity desktop set'."
+KIND="desktop"
+TAGS=(tty minimal server)
+SESSION=""
+PACKAGES=(
+  tmux micro btop fastfetch fzf ripgrep fd bat eza zoxide starship git openssh
+  man-db man-pages bash-completion
+)
+OPTIONAL=(
+  docker docker-compose
+  neovim
+  lazygit
+  podman
+)
+SERVICES=()
+CONFLICTS=()
+
+post_apply() {
+  # If docker was picked, enable it.
+  pac_installed docker && svc_enable docker
+  return 0
+}

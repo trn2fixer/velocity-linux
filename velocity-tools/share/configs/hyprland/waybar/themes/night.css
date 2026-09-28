@@ -1,0 +1,9 @@
+@define-color bg      rgba(11, 11, 18, 0.88);
+@define-color border  rgba(42, 42, 58, 0.9);
+@define-color fg      #e6e6f0;
+@define-color dim     #8c8ca0;
+@define-color accent  #7c5cff;
+@define-color accent2 #22d3ee;
+@define-color green   #a6e3a1;
+@define-color yellow  #f9e2af;
+@define-color red     #f38ba8;

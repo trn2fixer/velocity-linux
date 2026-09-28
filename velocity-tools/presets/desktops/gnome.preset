@@ -1,0 +1,49 @@
+# shellcheck shell=bash disable=SC2034
+NAME="GNOME"
+DESC="Clean, gesture-friendly desktop. Minimal GNOME core, no bundled games or extras."
+KIND="desktop"
+TAGS=(wayland full)
+SESSION="gnome"
+PACKAGES=(
+  gnome-shell gnome-session gnome-control-center gnome-settings-daemon
+  gnome-keyring gnome-backgrounds gnome-tweaks gnome-shell-extensions
+  gdm nautilus gnome-console gnome-text-editor loupe evince file-roller
+  gnome-disk-utility gnome-system-monitor gnome-calculator
+  xdg-desktop-portal-gnome xdg-user-dirs-gtk
+  pipewire pipewire-pulse pipewire-alsa wireplumber
+  noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd
+  firefox
+)
+OPTIONAL=(
+  gnome-calendar
+  gnome-clocks
+  gnome-weather
+  gnome-software
+  showtime
+  decibels
+  extension-manager
+)
+SERVICES=(gdm bluetooth)
+CONFLICTS=(sddm lightdm ly greetd)
+
+post_apply() {
+  # dconf defaults: dark theme + Velocity wallpaper
+  local d; d="$(target_path /etc/dconf/db/local.d)"
+  mkdir -p "${d}" "$(target_path /etc/dconf/profile)"
+  printf 'user-db:user\nsystem-db:local\n' >"$(target_path /etc/dconf/profile/user)"
+  cat >"${d}/10-velocity" <<'EOF'
+[org/gnome/desktop/interface]
+color-scheme='prefer-dark'
+accent-color='purple'
+monospace-font-name='JetBrainsMono Nerd Font 11'
+
+[org/gnome/desktop/background]
+picture-uri='file:///usr/share/backgrounds/velocity/wallpaper-day.png'
+picture-uri-dark='file:///usr/share/backgrounds/velocity/wallpaper-night.png'
+picture-options='zoom'
+
+[org/gnome/desktop/screensaver]
+picture-uri='file:///usr/share/backgrounds/velocity/wallpaper-night.png'
+EOF
+  in_target dconf update || true
+}

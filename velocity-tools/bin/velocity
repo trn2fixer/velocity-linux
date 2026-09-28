@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# velocity: the built-in customizer for Velocity Linux.
+#
+#   velocity                          interactive menu
+#   velocity desktop list|show|set <id> [--with a,b] [--no-optional]
+#   velocity bundle  list|show|add <id>... |remove <id>
+#   velocity theme   list|show|set <id>
+#   velocity shell   set <bash|zsh|fish> [--user NAME]
+#   velocity brand   apply
+#   velocity slim                     remove orphans, clean caches, trim journal
+#   velocity snapshot [label]         btrfs read-only snapshot of /
+#   velocity doctor                   hardware / network / boot sanity report
+#   velocity status                   what is currently applied
+#   velocity install-bootloader [--efi-dir /boot/efi] [--disk /dev/sdX]
+#
+# Options: --root DIR    operate on another root (used by the installer)
+
+set -euo pipefail
+
+VELOCITY_LIB="${VELOCITY_LIB:-/usr/lib/velocity}"
+# shellcheck disable=SC1091
+source "${VELOCITY_LIB}/common.sh"
+# shellcheck disable=SC1091
+source "${VELOCITY_LIB}/presets.sh"
+# shellcheck disable=SC1091
+source "${VELOCITY_LIB}/brand.sh"
+
+usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# ---------- subcommands ----------
+cmd_desktop() {
+  local action="${1:-list}"; shift || true
+  case "${action}" in
+    list) hdr "Desktops"; preset_list desktop ;;
+    show) preset_show desktop "${1:?desktop id}" ;;
+    set)
+      need_root
+      local id="${1:?desktop id}"; shift
+      preset_apply desktop "${id}" "$@"
+      # Apply the current theme to the new desktop, if one is set.
+      local th; th="$(state_get theme)"
+      [[ -n "${th}" ]] && preset_apply theme "${th}" --no-optional
+      ;;
+    *) die "desktop: unknown action '${action}'" ;;
+  esac
+}
+
+cmd_bundle() {
+  local action="${1:-list}"; shift || true
+  case "${action}" in
+    list) hdr "App bundles"; preset_list bundle ;;
+    show) preset_show bundle "${1:?bundle id}" ;;
+    add)
+      need_root
+      [[ $# -gt 0 ]] || die "bundle add: give one or more bundle ids"
+      local id
+      for id in "$@"; do
+        preset_apply bundle "${id}" --no-optional
+        local cur; cur="$(state_get bundles)"
+        [[ " ${cur} " == *" ${id} "* ]] || state_set bundles "${cur:+${cur} }${id}"
+      done
+      ;;
+    remove)
+      need_root
+      local id="${1:?bundle id}"
+      preset_load bundle "${id}" || die "unknown bundle: ${id}"
+      snapshot_maybe "remove-${id}"
+      pac_remove "${PACKAGES[@]}"
+      local cur; cur="$(state_get bundles)"
+      state_set bundles "$(tr ' ' '\n' <<<"${cur}" | grep -vx "${id}" | tr '\n' ' ' | sed 's/ *$//')"
+      ok "${NAME} removed"
+      ;;
+    *) die "bundle: unknown action '${action}'" ;;
+  esac
+}
+
+cmd_theme() {
+  local action="${1:-list}"; shift || true
+  case "${action}" in
+    list) hdr "Themes"; preset_list theme ;;
+    show) preset_show theme "${1:?theme id}" ;;
+    set) need_root; preset_apply theme "${1:?theme id}" "${@:2}" ;;
+    *) die "theme: unknown action '${action}'" ;;
+  esac
+}
+
+cmd_shell() {
+  local action="${1:-set}"; shift || true
+  [[ "${action}" == "set" ]] || die "shell: use 'velocity shell set <bash|zsh|fish>'"
+  need_root
+  local sh="${1:?shell}"; shift || true
+  local user=""
+  while [[ $# -gt 0 ]]; do case "$1" in --user) user="$2"; shift 2 ;; *) shift ;; esac; done
+  case "${sh}" in bash|zsh|fish) ;; *) die "supported shells: bash zsh fish" ;; esac
+  pac_install "${sh}" starship zoxide eza bat
+  local users
+  if [[ -n "${user}" ]]; then users="${user}"; else users="$(target_users)"; fi
+  local u
+  for u in ${users}; do
+    in_target chsh -s "/usr/bin/${sh}" "${u}"
+    install_user_config "${u}" "${VELOCITY_SHARE}/shell/${sh}" "."
+    ok "${u}: shell → ${sh}"
+  done
+  state_set shell "${sh}"
+}
+
+cmd_brand() {
+  need_root
+  case "${1:-apply}" in
+    apply) brand_apply ;;
+    *) die "brand: use 'velocity brand apply'" ;;
+  esac
+}
+
+cmd_slim() {
+  need_root
+  hdr "Slimming down"
+  local orphans
+  orphans="$(in_target pacman -Qdtq 2>/dev/null || true)"
+  if [[ -n "${orphans}" ]]; then
+    log "orphans: $(tr '\n' ' ' <<<"${orphans}")"
+    # shellcheck disable=SC2086
+    in_target pacman -Rns --noconfirm ${orphans}
+  else
+    dim "no orphaned packages"
+  fi
+  in_target paccache -rk1 2>/dev/null || in_target pacman -Sc --noconfirm
+  in_target journalctl --vacuum-size=100M >/dev/null 2>&1 || true
+  local u h
+  for u in $(target_users); do
+    h="$(user_home "${u}")"
+    rm -rf "${h}/.cache/thumbnails" 2>/dev/null || true
+  done
+  ok "done. Disk used on /: $(df -h "$(target_path /)" | awk 'NR==2{print $3" of "$2}')"
+}
+
+cmd_snapshot() {
+  need_root
+  local label="${1:-manual}"
+  [[ "$(findmnt -no FSTYPE "$(target_path /)")" == "btrfs" ]] || die "/ is not btrfs; snapshots need btrfs"
+  snapshot_maybe "${label}"
+}
+
+cmd_status() {
+  ui_banner
+  printf '%sDesktop%s  %s\n' "${C_BOLD}" "${C_RESET}" "$(state_get desktop 'none')"
+  printf '%sTheme%s    %s\n' "${C_BOLD}" "${C_RESET}" "$(state_get theme 'none')"
+  printf '%sShell%s    %s\n' "${C_BOLD}" "${C_RESET}" "$(state_get shell 'default')"
+  printf '%sBundles%s  %s\n' "${C_BOLD}" "${C_RESET}" "$(state_get bundles 'none')"
+  printf '%sPackages%s %s explicit, %s total\n' "${C_BOLD}" "${C_RESET}" \
+    "$(in_target pacman -Qeq 2>/dev/null | wc -l)" "$(in_target pacman -Qq 2>/dev/null | wc -l)"
+  printf '%sKernel%s   %s\n' "${C_BOLD}" "${C_RESET}" "$(uname -r)"
+}
+
+cmd_doctor() {
+  hdr "Velocity doctor"
+  local fails=0
+  check() { # check "label" cmd...
+    local label="$1"; shift
+    if "$@" >/dev/null 2>&1; then ok "${label}"; else warn "${label}"; ((fails++)) || true; fi
+  }
+  check "booted in UEFI mode" test -d /sys/firmware/efi
+  check "internet reachable" curl -fsI --max-time 5 https://archlinux.org
+  check "pacman keyring initialized" test -s /etc/pacman.d/gnupg/trustdb.gpg
+  check "time synchronised" timedatectl show -p NTPSynchronized --value
+  check "CPU microcode package present" bash -c 'pacman -Qq intel-ucode amd-ucode 2>/dev/null | grep -q .'
+  printf '\n%sCPU%s  %s\n' "${C_BOLD}" "${C_RESET}" "$(lscpu | awk -F: '/Model name/{gsub(/^ +/,"",$2);print $2;exit}')"
+  printf '%sGPU%s  %s\n' "${C_BOLD}" "${C_RESET}" "$(lspci | grep -iE 'vga|3d|display' | sed 's/.*: //' | paste -sd ';' -)"
+  printf '%sRAM%s  %s\n' "${C_BOLD}" "${C_RESET}" "$(free -h | awk '/Mem:/{print $2}')"
+  printf '%sDisks%s\n' "${C_BOLD}" "${C_RESET}"
+  lsblk -dno NAME,SIZE,MODEL,TRAN | sed 's/^/  /'
+  # GPU driver suggestion
+  if lspci | grep -qi nvidia; then
+    printf '\n%sHint%s NVIDIA GPU detected: velocity bundle add nvidia\n' "${C_YELLOW}" "${C_RESET}"
+  fi
+  [[ ${fails} -eq 0 ]] && ok "all checks passed" || warn "${fails} check(s) need attention"
+}
+
+cmd_install_bootloader() {
+  need_root
+  local efi_dir="/boot" disk=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --efi-dir) efi_dir="$2"; shift 2 ;;
+      --disk) disk="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  pac_install grub efibootmgr os-prober
+  brand_grub
+  if [[ -d "$(target_path /sys/firmware/efi)" || -d /sys/firmware/efi ]]; then
+    in_target grub-install --target=x86_64-efi --efi-directory="${efi_dir}" --bootloader-id=Velocity --recheck
+  else
+    [[ -n "${disk}" ]] || die "BIOS install needs --disk /dev/sdX"
+    in_target grub-install --target=i386-pc --recheck "${disk}"
+  fi
+  in_target grub-mkconfig -o /boot/grub/grub.cfg
+  ok "GRUB installed"
+}
+
+# ---------- interactive menu ----------
+menu() {
+  while :; do
+    clear
+    ui_banner
+    local choice
+    choice="$(ui_choose "What do you want to do?" \
+      "Desktop     · pick or switch your desktop environment" \
+      "Bundles     · add app bundles (dev, gaming, creative, office…)" \
+      "Theme       · Night / Day and accent colours" \
+      "Shell       · zsh, fish or bash with the Velocity prompt" \
+      "Slim        · remove orphans and clean caches" \
+      "Snapshot    · btrfs snapshot before you experiment" \
+      "Doctor      · check hardware, network and boot" \
+      "Status      · what is applied right now" \
+      "Quit")" || return 0
+    case "${choice%% *}" in
+      Desktop)
+        local ids; mapfile -t ids < <(preset_ids desktop)
+        local id; id="$(ui_choose "Desktop:" "${ids[@]}")" || continue
+        cmd_desktop set "${id}" ;;
+      Bundles)
+        local ids; mapfile -t ids < <(preset_ids bundle)
+        local sel; mapfile -t sel < <(ui_multi "Bundles to add:" "${ids[@]}")
+        [[ ${#sel[@]} -gt 0 ]] && cmd_bundle add "${sel[@]}" ;;
+      Theme)
+        local ids; mapfile -t ids < <(preset_ids theme)
+        local id; id="$(ui_choose "Theme:" "${ids[@]}")" || continue
+        cmd_theme set "${id}" ;;
+      Shell)
+        local sh; sh="$(ui_choose "Shell:" zsh fish bash)" || continue
+        cmd_shell set "${sh}" ;;
+      Slim) cmd_slim ;;
+      Snapshot) cmd_snapshot "$(ui_input "Label:" manual)" ;;
+      Doctor) cmd_doctor ;;
+      Status) cmd_status ;;
+      Quit) return 0 ;;
+    esac
+    printf '\n'
+    read -r -p "$(dim 'Enter to continue…')" _
+  done
+}
+
+# ---------- main ----------
+main() {
+  # global options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --root) VELOCITY_ROOT="$2"; shift 2 ;;
+      -h|--help|help) usage; exit 0 ;;
+      -V|--version) echo "velocity ${VELOCITY_VERSION}"; exit 0 ;;
+      *) break ;;
+    esac
+  done
+  export VELOCITY_ROOT
+
+  local cmd="${1:-menu}"; shift || true
+  case "${cmd}" in
+    menu) need_root; menu ;;
+    desktop) cmd_desktop "$@" ;;
+    bundle|bundles) cmd_bundle "$@" ;;
+    theme|themes) cmd_theme "$@" ;;
+    shell) cmd_shell "$@" ;;
+    brand) cmd_brand "$@" ;;
+    slim) cmd_slim ;;
+    snapshot) cmd_snapshot "$@" ;;
+    doctor) cmd_doctor ;;
+    status) cmd_status ;;
+    install-bootloader) cmd_install_bootloader "$@" ;;
+    *) err "unknown command: ${cmd}"; usage; exit 1 ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,12 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Creative"
+DESC="GIMP, Inkscape, Krita, Blender, Kdenlive, OBS, Audacity, Darktable."
+KIND="bundle"
+TAGS=(creative media)
+PACKAGES=(
+  gimp inkscape krita blender kdenlive obs-studio audacity darktable
+  ffmpeg imagemagick
+)
+OPTIONAL=()
+SERVICES=()
+CONFLICTS=()

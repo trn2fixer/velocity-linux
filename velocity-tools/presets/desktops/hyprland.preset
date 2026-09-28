@@ -1,0 +1,50 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Hyprland"
+DESC="Tiling Wayland compositor with the Velocity rice: waybar, rofi, kitty, swww. Fast and pretty."
+KIND="desktop"
+TAGS=(wayland tiling rice)
+SESSION="hyprland"
+PACKAGES=(
+  hyprland xdg-desktop-portal-hyprland hyprpaper hyprlock hypridle hyprpolkitagent
+  waybar rofi-wayland dunst kitty thunar thunar-archive-plugin file-roller
+  swww wl-clipboard cliphist grim slurp brightnessctl playerctl pavucontrol
+  network-manager-applet blueman
+  pipewire pipewire-pulse pipewire-alsa wireplumber
+  qt5-wayland qt6-wayland polkit-gnome
+  greetd greetd-tuigreet
+  noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd ttf-font-awesome
+  papirus-icon-theme
+  firefox
+  nwg-look
+)
+OPTIONAL=(
+  wlogout
+  swappy
+  imv
+  mpv
+  btop
+  zathura zathura-pdf-mupdf
+)
+SERVICES=(greetd bluetooth)
+CONFLICTS=(sddm gdm lightdm ly)
+
+post_apply() {
+  # greetd -> tuigreet -> Hyprland
+  local g; g="$(target_path /etc/greetd)"
+  mkdir -p "${g}"
+  cat >"${g}/config.toml" <<'EOF'
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --time --remember --asterisks --theme 'border=magenta;text=white;prompt=cyan;time=magenta;action=cyan;button=white;container=black;input=white' --cmd Hyprland"
+user = "greeter"
+EOF
+  # Rice into /etc/skel so every new user gets it, plus existing users.
+  local src="${VELOCITY_SHARE}/configs/hyprland"
+  local skel; skel="$(target_path /etc/skel/.config)"
+  mkdir -p "${skel}"
+  cp -rT "${src}" "${skel}"
+  local u
+  for u in $(target_users); do install_user_config "${u}" "${src}" ".config"; done
+}

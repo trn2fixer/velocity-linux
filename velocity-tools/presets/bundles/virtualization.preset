@@ -1,0 +1,21 @@
+# shellcheck shell=bash disable=SC2034
+NAME="Virtualization"
+DESC="QEMU/KVM with virt-manager, plus guest tools if Velocity itself is running in a VM."
+KIND="bundle"
+TAGS=(virt)
+PACKAGES=(
+  qemu-desktop libvirt virt-manager virt-viewer dnsmasq edk2-ovmf swtpm
+  spice-vdagent qemu-guest-agent
+)
+OPTIONAL=()
+SERVICES=(libvirtd)
+CONFLICTS=()
+
+post_apply() {
+  local u
+  for u in $(target_users); do in_target usermod -aG libvirt "${u}" || true; done
+  # If we are a guest, enable the agent services.
+  if systemd-detect-virt -q 2>/dev/null; then
+    svc_enable qemu-guest-agent spice-vdagentd 2>/dev/null || true
+  fi
+}

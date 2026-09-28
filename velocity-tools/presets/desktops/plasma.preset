@@ -1,0 +1,46 @@
+# shellcheck shell=bash disable=SC2034
+NAME="KDE Plasma"
+DESC="Polished, full-featured desktop. Wayland by default. Great for most people."
+KIND="desktop"
+TAGS=(wayland full recommended)
+SESSION="plasma"
+PACKAGES=(
+  plasma-desktop plasma-wayland-protocols plasma-nm plasma-pa plasma-systemmonitor
+  kscreen powerdevil bluedevil kde-gtk-config breeze-gtk kdeplasma-addons
+  sddm sddm-kcm
+  konsole dolphin ark kate spectacle gwenview okular
+  xdg-desktop-portal-kde xdg-user-dirs
+  pipewire pipewire-pulse pipewire-alsa wireplumber
+  noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd
+  firefox
+)
+OPTIONAL=(
+  kdeconnect
+  kcalc
+  partitionmanager
+  filelight
+  elisa
+  haruna
+  print-manager
+)
+SERVICES=(sddm bluetooth)
+CONFLICTS=(gdm lightdm ly greetd)
+
+post_apply() {
+  local d; d="$(target_path /etc/sddm.conf.d)"
+  mkdir -p "${d}"
+  cat >"${d}/10-velocity.conf" <<EOF
+[Theme]
+Current=breeze
+
+[General]
+DisplayServer=wayland
+EOF
+  # Wallpaper default for new users
+  local skel; skel="$(target_path /etc/skel/.config)"
+  mkdir -p "${skel}"
+  cat >"${skel}/plasma-org.kde.plasma.desktop-appletsrc" <<'EOF'
+[Containments][1][Wallpaper][org.kde.image][General]
+Image=file:///usr/share/backgrounds/velocity/wallpaper-night.png
+EOF
+}
