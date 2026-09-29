@@ -40,7 +40,7 @@ qemu-system-x86_64 \
   "${ACCEL[@]}" -m 3072 -smp 2 \
   -machine q35 \
   -kernel "${KERNEL}" -initrd "${INITRD}" \
-  -append "archisobasedir=velocity archisolabel=${LABEL} rootdelay=20 console=tty0 console=ttyS0,115200 velocity.selftest systemd.show_status=false" \
+  -append "archisobasedir=velocity archisolabel=${LABEL} rootdelay=20 console=tty0 console=ttyS0,115200 velocity.selftest" \
   -device ahci,id=ahci \
   -drive file="${ISO}",media=cdrom,if=none,id=cd0,readonly=on \
   -device ide-cd,drive=cd0,bus=ahci.0 \
@@ -50,23 +50,31 @@ qemu-system-x86_64 \
   -no-reboot &
 QPID=$!
 
-# stream the serial console so CI logs show progress
-tail -n +1 -F "${SERIAL}" --pid="${QPID}" 2>/dev/null | tr -d '\r' | sed 's/^/  [vm] /' &
-TPID=$!
+# print new serial lines as they arrive so CI logs show progress
+printed=0
+stream() {
+  local total
+  total="$(wc -l <"${SERIAL}")"
+  if (( total > printed )); then
+    sed -n "$((printed + 1)),${total}p" "${SERIAL}" | tr -d '\r' | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/^/  [vm] /'
+    printed=${total}
+  fi
+}
 
 deadline=$((SECONDS + TIMEOUT))
 result=""
 while kill -0 "${QPID}" 2>/dev/null; do
+  stream
   if grep -q 'VELOCITY_SELFTEST_OK' "${SERIAL}"; then result=ok; break; fi
   if grep -q 'VELOCITY_SELFTEST_FAIL' "${SERIAL}"; then result=fail; break; fi
   if (( SECONDS >= deadline )); then result=timeout; break; fi
   sleep 5
 done
+stream
 # give poweroff a moment, then make sure QEMU is gone
 sleep 10
 kill "${QPID}" 2>/dev/null || true
 wait "${QPID}" 2>/dev/null || true
-kill "${TPID}" 2>/dev/null || true
 
 echo
 echo "================ self-test output ================"

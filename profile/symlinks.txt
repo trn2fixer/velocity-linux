@@ -24,3 +24,7 @@ etc/resolv.conf   /run/systemd/resolve/stub-resolv.conf
 
 # --- default shell config ---
 root/.zshrc       /etc/velocity/live/zshrc
+
+# --- live medium: never prompt for first-boot setup ---
+etc/systemd/system/systemd-firstboot.service   /dev/null
+etc/localtime                                   /usr/share/zoneinfo/UTC
