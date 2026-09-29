@@ -52,6 +52,7 @@ python
 git
 
 # --- network ---
+inetutils
 iwd
 networkmanager
 wireless-regdb

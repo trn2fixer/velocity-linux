@@ -22,7 +22,7 @@ echo "kernel: $(uname -r)   cmdline: $(cat /proc/cmdline)"
 # --- identity ---
 t "os-release identifies as Velocity"    grep -q '^ID=velocity' /etc/os-release
 t "os-release keeps ID_LIKE=arch"        grep -q '^ID_LIKE=arch' /etc/os-release
-t "hostname is velocity"                 bash -c '[[ "$(hostname)" == velocity ]]'
+t "hostname is velocity"                 grep -qx velocity /etc/hostname
 
 # --- services that the profile enables ---
 t "getty@tty1 (autologin) active"        systemctl is-active getty@tty1
