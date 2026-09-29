@@ -47,7 +47,7 @@ jobs:
     name: Boot ISO in QEMU and run self-test
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -57,7 +57,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q qemu-system-x86 qemu-utils libarchive-tools
+          sudo apt-get install -y -q qemu-system-x86 qemu-utils libarchive-tools genisoimage
           # KVM is available on GitHub-hosted Linux runners; make it usable without sudo.
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; echo "KVM available"; else echo "no KVM, using TCG (slow)"; fi
       - name: Boot and run self-test

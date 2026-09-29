@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ISO="${1:?path to iso}"; shift || true
-TIMEOUT=1500
+TIMEOUT=720
 while [[ $# -gt 0 ]]; do case "$1" in --timeout) TIMEOUT="$2"; shift 2 ;; *) shift ;; esac; done
 
 OUT="$(dirname "${ISO}")/boot-test"
@@ -26,20 +26,33 @@ INITRD="${OUT}/velocity/boot/x86_64/initramfs-linux.img"
 qemu-img create -q -f qcow2 "${OUT}/disk.qcow2" 20G
 
 ACCEL=(-accel tcg -cpu max)
-if [[ -w /dev/kvm ]]; then ACCEL=(-accel kvm -cpu host); fi
+ACCEL_NAME=tcg
+if [[ -w /dev/kvm ]]; then ACCEL=(-accel kvm -cpu host); ACCEL_NAME=kvm; fi
 
-echo "booting ${ISO} (accel: ${ACCEL[1]}, timeout ${TIMEOUT}s)"
+# The archiso hook locates the medium by volume label; read it from the ISO.
+LABEL="$(blkid -o value -s LABEL "${ISO}" 2>/dev/null || true)"
+[[ -n "${LABEL}" ]] || LABEL="$(isoinfo -d -i "${ISO}" 2>/dev/null | awk -F': ' '/^Volume id/{print $2}')"
+[[ -n "${LABEL}" ]] || { echo "could not read ISO volume label" >&2; exit 1; }
+echo "ISO label: ${LABEL}"
+
+echo "booting ${ISO} (accel: ${ACCEL_NAME}, timeout ${TIMEOUT}s)"
 qemu-system-x86_64 \
   "${ACCEL[@]}" -m 3072 -smp 2 \
   -machine q35 \
   -kernel "${KERNEL}" -initrd "${INITRD}" \
-  -append "archisobasedir=velocity archisodevice=/dev/sr0 console=tty0 console=ttyS0,115200 velocity.selftest systemd.show_status=false" \
-  -drive file="${ISO}",media=cdrom,if=ide,readonly=on \
+  -append "archisobasedir=velocity archisolabel=${LABEL} rootdelay=20 console=tty0 console=ttyS0,115200 velocity.selftest systemd.show_status=false" \
+  -device ahci,id=ahci \
+  -drive file="${ISO}",media=cdrom,if=none,id=cd0,readonly=on \
+  -device ide-cd,drive=cd0,bus=ahci.0 \
   -drive file="${OUT}/disk.qcow2",if=virtio,format=qcow2 \
   -nic user,model=virtio-net-pci \
   -display none -serial "file:${SERIAL}" -monitor none \
   -no-reboot &
 QPID=$!
+
+# stream the serial console so CI logs show progress
+tail -n +1 -F "${SERIAL}" --pid="${QPID}" 2>/dev/null | tr -d '\r' | sed 's/^/  [vm] /' &
+TPID=$!
 
 deadline=$((SECONDS + TIMEOUT))
 result=""
@@ -53,6 +66,7 @@ done
 sleep 10
 kill "${QPID}" 2>/dev/null || true
 wait "${QPID}" 2>/dev/null || true
+kill "${TPID}" 2>/dev/null || true
 
 echo
 echo "================ self-test output ================"
