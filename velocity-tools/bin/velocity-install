@@ -193,7 +193,8 @@ ask_software() {
     done
     local sel; mapfile -t sel < <(ui_multi "App bundles (space to select, none is fine):" "${blabels[@]}")
     V_BUNDLES="$(for s in "${sel[@]}"; do printf '%s ' "${s%% *}"; done)"
-    V_THEME="$(ui_choose "Theme:" $(preset_ids theme))"
+    local tids; mapfile -t tids < <(preset_ids theme)
+    V_THEME="$(ui_choose "Theme:" "${tids[@]}")"
     V_SHELL="$(ui_choose "Shell:" zsh fish bash)"
   fi
 }

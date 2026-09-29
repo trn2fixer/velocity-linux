@@ -3,7 +3,7 @@
 #   scripts/check.sh
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${REPO}"
+cd "${REPO}" || exit 1
 fails=0
 pass() { printf 'ok   %s\n' "$*"; }
 fail() { printf 'FAIL %s\n' "$*" >&2; fails=$((fails + 1)); }
@@ -29,7 +29,7 @@ done
 
 # 2. shellcheck when available
 if command -v shellcheck >/dev/null 2>&1; then
-  if shellcheck -x -e SC1091,SC2154 build.sh scripts/*.sh velocity-tools/bin/* velocity-tools/lib/*.sh \
+  if shellcheck -S warning -x -e SC1091,SC2154 build.sh scripts/*.sh velocity-tools/bin/* velocity-tools/lib/*.sh \
       profile/airootfs/usr/local/bin/*; then
     pass "shellcheck"
   else

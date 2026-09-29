@@ -38,7 +38,9 @@ if [[ ${SKIP_ASSETS} -eq 0 ]]; then
   python3 "${REPO}/assets/generate.py" --out "${REPO}/assets/out"
 fi
 mkdir -p "${REPO}/profile/syslinux"
-[[ -f "${REPO}/assets/out/splash.png" ]] && cp -f "${REPO}/assets/out/splash.png" "${REPO}/profile/syslinux/splash.png"
+if [[ -f "${REPO}/assets/out/splash.png" ]]; then
+  cp -f "${REPO}/assets/out/splash.png" "${REPO}/profile/syslinux/splash.png"
+fi
 
 # ---------- 2. build velocity-tools package ----------
 log "building velocity-tools"
@@ -49,8 +51,8 @@ cp -r "${REPO}/velocity-tools" "${REPO}/LICENSE" "${PKG_TMP}/"
 mkdir -p "${PKG_TMP}/assets" && cp -r "${REPO}/assets/out" "${PKG_TMP}/assets/" 2>/dev/null || true
 chown -R "${BUILD_USER}" "${PKG_TMP}"
 ( cd "${PKG_TMP}/velocity-tools" && sudo -u "${BUILD_USER}" makepkg -f --nodeps --noconfirm >/dev/null )
-PKG_FILE="$(ls "${PKG_TMP}"/velocity-tools/velocity-tools-*.pkg.tar.* | head -n1)"
-[[ -f "${PKG_FILE}" ]] || die "makepkg produced no package"
+PKG_FILE="$(find "${PKG_TMP}/velocity-tools" -maxdepth 1 -name 'velocity-tools-*.pkg.tar.*' | head -n1)"
+[[ -n "${PKG_FILE}" && -f "${PKG_FILE}" ]] || die "makepkg produced no package"
 ok "built $(basename "${PKG_FILE}")"
 
 # ---------- 3. local repo (for mkarchiso and for the installer on the ISO) ----------
