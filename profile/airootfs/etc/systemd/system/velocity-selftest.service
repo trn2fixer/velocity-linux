@@ -1,0 +1,16 @@
+[Unit]
+Description=Velocity live self-test (only with velocity.selftest on the kernel command line)
+ConditionKernelCommandLine=velocity.selftest
+After=network-online.target pacman-init.service getty@tty1.service systemd-resolved.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=TERM=linux
+Environment=NO_COLOR=1
+ExecStart=/usr/local/bin/velocity-selftest
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

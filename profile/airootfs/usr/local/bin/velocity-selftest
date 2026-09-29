@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Runs inside the booted live ISO when the kernel command line contains
+# `velocity.selftest`. Output goes to the serial console so a CI job can read it.
+# Powers the machine off when done.
+set -uo pipefail
+
+fails=0
+t() { # t "name" cmd...
+  local name="$1"; shift
+  if "$@" >/tmp/selftest.log 2>&1; then
+    echo "PASS ${name}"
+  else
+    echo "FAIL ${name}"
+    tail -n 20 /tmp/selftest.log | sed 's/^/     | /'
+    fails=$((fails + 1))
+  fi
+}
+
+echo "===== VELOCITY SELFTEST ====="
+echo "kernel: $(uname -r)   cmdline: $(cat /proc/cmdline)"
+
+# --- identity ---
+t "os-release identifies as Velocity"    grep -q '^ID=velocity' /etc/os-release
+t "os-release keeps ID_LIKE=arch"        grep -q '^ID_LIKE=arch' /etc/os-release
+t "hostname is velocity"                 bash -c '[[ "$(hostname)" == velocity ]]'
+
+# --- services that the profile enables ---
+t "getty@tty1 (autologin) active"        systemctl is-active getty@tty1
+t "NetworkManager active"                systemctl is-active NetworkManager
+t "pacman-init ran"                      systemctl is-active pacman-init
+t "systemd-resolved active"              systemctl is-active systemd-resolved
+
+# --- velocity-tools shipped and wired ---
+t "velocity on PATH"                     command -v velocity
+t "velocity-install on PATH"             command -v velocity-install
+t "local repo on ISO"                    test -f /opt/velocity-repo/velocity.db
+t "presets installed"                    test -d /usr/share/velocity/presets/desktops
+t "root shell rc symlink resolves"       test -r /root/.zshrc
+t "live-init runs clean"                 /usr/local/bin/velocity-live-init
+
+# --- customizer ---
+t "velocity --version"                   velocity --version
+t "velocity desktop list"                velocity desktop list
+t "velocity bundle list"                 velocity bundle list
+t "velocity theme list"                  velocity theme list
+t "velocity desktop show plasma"         velocity desktop show plasma
+t "velocity desktop show hyprland"       velocity desktop show hyprland
+t "velocity status"                      velocity status
+
+echo "----- velocity doctor (informational) -----"
+velocity doctor 2>&1 | sed 's/^/     | /'
+
+# --- installer dry run against the attached test disk ---
+cat >/tmp/selftest-install.conf <<'EOF'
+V_DISK=/dev/vda
+V_DISK_MODE=wipe
+V_ENCRYPT=no
+V_HOSTNAME=selftest
+V_USER=tester
+V_USER_PASS=tester
+V_TIMEZONE=UTC
+V_LOCALE=en_US.UTF-8
+V_KEYMAP=us
+V_KERNEL=linux
+V_DESKTOP=core
+V_BUNDLES=""
+V_THEME=night
+V_SHELL=zsh
+EOF
+if [[ -b /dev/vda ]]; then
+  t "velocity-install --dry-run"         velocity-install --dry-run --config /tmp/selftest-install.conf
+  echo "----- installer plan -----"
+  sed 's/^/     | /' /tmp/selftest.log
+else
+  echo "SKIP velocity-install --dry-run (no /dev/vda)"
+fi
+
+echo "============================="
+if [[ ${fails} -eq 0 ]]; then
+  echo "VELOCITY_SELFTEST_OK"
+else
+  echo "VELOCITY_SELFTEST_FAIL ${fails}"
+fi
+sync
+sleep 2
+systemctl poweroff

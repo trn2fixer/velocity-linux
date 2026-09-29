@@ -50,6 +50,9 @@ package() {
     cp "${_repo}/assets/out"/wallpaper-*.png "${pkgdir}/usr/share/velocity/wallpapers/" 2>/dev/null || true
     install -d "${pkgdir}/usr/share/velocity/grub/theme"
     cp "${_repo}/assets/out/grub-background.png" "${pkgdir}/usr/share/velocity/grub/theme/background.png" 2>/dev/null || true
+    cp "${_repo}/assets/out"/select_*.png "${_repo}/assets/out"/terminal_box_*.png "${pkgdir}/usr/share/velocity/grub/theme/" 2>/dev/null || true
+    install -d "${pkgdir}/usr/share/pixmaps"
+    cp "${_repo}/assets/out/logo.png" "${pkgdir}/usr/share/pixmaps/velocity.png" 2>/dev/null || true
   fi
 
   # pacman hook

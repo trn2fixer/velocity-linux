@@ -17,6 +17,7 @@ etc/systemd/system/dbus-org.freedesktop.resolve1.service                 /usr/li
 etc/systemd/system/sysinit.target.wants/systemd-timesyncd.service        /usr/lib/systemd/system/systemd-timesyncd.service
 etc/systemd/system/sockets.target.wants/systemd-networkd.socket          /usr/lib/systemd/system/systemd-networkd.socket
 etc/systemd/system/sysinit.target.wants/livecd-alsa-unmuter.service      /etc/systemd/system/livecd-alsa-unmuter.service
+etc/systemd/system/multi-user.target.wants/velocity-selftest.service     /etc/systemd/system/velocity-selftest.service
 
 # --- resolv.conf handled by systemd-resolved stub ---
 etc/resolv.conf   /run/systemd/resolve/stub-resolv.conf

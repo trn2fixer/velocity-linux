@@ -10,9 +10,10 @@ fail() { printf 'FAIL %s\n' "$*" >&2; fails=$((fails + 1)); }
 
 # 1. every bash script parses
 scripts=(
-  build.sh scripts/build-iso.sh scripts/check.sh
+  build.sh scripts/build-iso.sh scripts/check.sh scripts/boot-test.sh
   profile/profiledef.sh
   profile/airootfs/usr/local/bin/velocity-live-init
+  profile/airootfs/usr/local/bin/velocity-selftest
   profile/airootfs/usr/local/bin/choose-mirror
   profile/airootfs/usr/local/bin/livecd-sound
   profile/airootfs/usr/local/bin/Installation_guide
