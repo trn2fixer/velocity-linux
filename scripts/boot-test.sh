@@ -75,8 +75,10 @@ run_vm() {
   esac
 }
 
+# shellcheck disable=SC2054  # commas are part of QEMU's option syntax, not array separators
 CDROM=(-device ahci,id=ahci -drive "file=${ISO},media=cdrom,if=none,id=cd0,readonly=on" -device ide-cd,drive=cd0,bus=ahci.0)
 VDISK=(-drive "file=${DISK},if=virtio,format=qcow2")
+# shellcheck disable=SC2054
 NET=(-nic user,model=virtio-net-pci)
 BASE_APPEND="archisobasedir=velocity archisolabel=${LABEL} rootdelay=20 cow_spacesize=1G console=tty0 console=ttyS0,115200"
 
