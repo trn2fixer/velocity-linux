@@ -17,6 +17,7 @@ t() {
 
 echo "===== VELOCITY INSTALLTEST ====="
 echo "kernel: $(uname -r)   cmdline: $(cat /proc/cmdline)"
+sleep 15   # let the rest of boot settle; this unit is itself part of boot
 
 # identity and branding
 t "os-release ID=velocity"                 grep -q '^ID=velocity' /etc/os-release
@@ -46,7 +47,7 @@ t "wheel sudoers rule"                     test -f /etc/sudoers.d/10-wheel
 t "NetworkManager enabled"                 systemctl is-enabled NetworkManager
 t "timesyncd enabled"                      systemctl is-enabled systemd-timesyncd
 t "fstrim.timer enabled"                   systemctl is-enabled fstrim.timer
-t "system reached running state"           bash -c 'systemctl is-system-running --wait | grep -Eq "running|degraded"'
+t "no failed units"                        bash -c '[[ "$(systemctl --failed --no-legend --no-pager | wc -l)" -eq 0 ]]'
 
 # velocity tooling state
 t "velocity installed"                     command -v velocity
