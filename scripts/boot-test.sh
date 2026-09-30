@@ -68,6 +68,12 @@ run_vm() {
   sleep 10
   kill "${qpid}" 2>/dev/null || true
   wait "${qpid}" 2>/dev/null || true
+  # The VM may print its verdict and power off between two polls; check once more.
+  if [[ -z "${result}" || "${result}" == timeout ]]; then
+    if grep -q "${okm}" "${serial}"; then result=ok
+    elif grep -q "${failm}" "${serial}"; then result=fail
+    fi
+  fi
   case "${result}" in
     ok) return 0 ;;
     fail) return 1 ;;
