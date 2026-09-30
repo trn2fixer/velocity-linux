@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Runs on the live medium when the kernel command line contains
+# `velocity.autoinstall`. Performs an unattended install using the CI profile,
+# prints a verdict on the console, then powers off.
+set -uo pipefail
+
+echo "===== VELOCITY AUTOINSTALL ====="
+# wait up to 60s for the network
+for _ in $(seq 1 12); do
+  curl -fsI --max-time 4 https://archlinux.org >/dev/null 2>&1 && break
+  sleep 5
+done
+
+if velocity-install --config /etc/velocity/ci/autoinstall.conf; then
+  echo "VELOCITY_AUTOINSTALL_OK"
+else
+  echo "----- last 40 lines of /var/log/velocity.log -----"
+  tail -n 40 /var/log/velocity.log 2>/dev/null | sed 's/^/     | /'
+  echo "VELOCITY_AUTOINSTALL_FAIL"
+fi
+sync
+sleep 2
+systemctl poweroff

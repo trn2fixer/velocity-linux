@@ -14,6 +14,10 @@ scripts=(
   profile/profiledef.sh
   profile/airootfs/usr/local/bin/velocity-live-init
   profile/airootfs/usr/local/bin/velocity-selftest
+  profile/airootfs/usr/local/bin/velocity-autoinstall
+  profile/airootfs/etc/velocity/ci/post-install.sh
+  profile/airootfs/etc/velocity/ci/velocity-installtest
+  profile/airootfs/etc/velocity/ci/autoinstall.conf
   profile/airootfs/usr/local/bin/choose-mirror
   profile/airootfs/usr/local/bin/livecd-sound
   profile/airootfs/usr/local/bin/Installation_guide

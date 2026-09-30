@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Runs on the first boot of a system installed by the CI autoinstall profile.
+# Verifies the installed system, prints a verdict on the console, powers off.
+set -uo pipefail
+
+fails=0
+t() {
+  local name="$1"; shift
+  if "$@" >/tmp/installtest.log 2>&1; then
+    echo "PASS ${name}"
+  else
+    echo "FAIL ${name}"
+    tail -n 15 /tmp/installtest.log | sed 's/^/     | /'
+    fails=$((fails + 1))
+  fi
+}
+
+echo "===== VELOCITY INSTALLTEST ====="
+echo "kernel: $(uname -r)   cmdline: $(cat /proc/cmdline)"
+
+# identity and branding
+t "os-release ID=velocity"                 grep -q '^ID=velocity' /etc/os-release
+t "hostname velocity-test"                 grep -qx velocity-test /etc/hostname
+t "lsb-release branded"                    grep -q 'Velocity' /etc/lsb-release
+t "GRUB config present"                    test -s /boot/grub/grub.cfg
+t "GRUB distributor is Velocity"           grep -q 'GRUB_DISTRIBUTOR="Velocity"' /etc/default/grub
+t "not running from live medium"           test ! -d /run/archiso
+
+# storage layout
+t "/ is btrfs"                             bash -c '[[ "$(findmnt -no FSTYPE /)" == btrfs ]]'
+t "/home is its own subvolume"             findmnt -no OPTIONS /home
+t "@snapshots mounted"                     findmnt /.snapshots
+t "fresh-install snapshot exists"          test -d /.snapshots/velocity-fresh-install
+t "zram swap active"                       bash -c 'swapon --show --noheadings | grep -q zram'
+t "fstab has entries"                      bash -c '[[ $(grep -cv "^#" /etc/fstab) -ge 4 ]]'
+
+# users
+t "user tester exists"                     id tester
+t "tester in wheel"                        bash -c 'id -nG tester | grep -qw wheel'
+t "tester shell is zsh"                    bash -c '[[ "$(getent passwd tester | cut -d: -f7)" == /usr/bin/zsh ]]'
+t "tester has .zshrc"                      test -f /home/tester/.zshrc
+t "root login disabled"                    bash -c 'passwd -S root | grep -qE " (L|LK) "'
+t "wheel sudoers rule"                     test -f /etc/sudoers.d/10-wheel
+
+# services
+t "NetworkManager enabled"                 systemctl is-enabled NetworkManager
+t "timesyncd enabled"                      systemctl is-enabled systemd-timesyncd
+t "fstrim.timer enabled"                   systemctl is-enabled fstrim.timer
+t "system reached running state"           bash -c 'systemctl is-system-running --wait | grep -Eq "running|degraded"'
+
+# velocity tooling state
+t "velocity installed"                     command -v velocity
+t "state desktop=core"                     bash -c '[[ "$(cat /var/lib/velocity/desktop)" == core ]]'
+t "state theme=night"                      bash -c '[[ "$(cat /var/lib/velocity/theme)" == night ]]'
+t "state shell=zsh"                        bash -c '[[ "$(cat /var/lib/velocity/shell)" == zsh ]]'
+t "core preset packages present"           pacman -Qq tmux btop fastfetch starship
+t "theme packages present"                 pacman -Qq papirus-icon-theme
+t "starship config installed"              test -f /etc/velocity/starship.toml
+t "velocity status runs"                   velocity status
+t "no pacman orphans"                      bash -c '! pacman -Qdtq | grep -q .'
+
+echo "----- failed units (if any) -----"
+systemctl --failed --no-legend --no-pager | sed 's/^/     | /'
+
+echo "================================"
+if [[ ${fails} -eq 0 ]]; then
+  echo "VELOCITY_INSTALLTEST_OK"
+else
+  echo "VELOCITY_INSTALLTEST_FAIL ${fails}"
+fi
+sync
+sleep 2
+systemctl poweroff

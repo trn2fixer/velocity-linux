@@ -44,10 +44,14 @@ jobs:
           retention-days: 14
 
   boot-test:
-    name: Boot ISO in QEMU and run self-test
+    name: Boot test (${{ matrix.mode }})
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [live, install]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -60,13 +64,13 @@ jobs:
           sudo apt-get install -y -q qemu-system-x86 qemu-utils libarchive-tools genisoimage
           # KVM is available on GitHub-hosted Linux runners; make it usable without sudo.
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; echo "KVM available"; else echo "no KVM, using TCG (slow)"; fi
-      - name: Boot and run self-test
-        run: bash scripts/boot-test.sh out/velocity-*.iso
+      - name: Run ${{ matrix.mode }} test
+        run: bash scripts/boot-test.sh out/velocity-*.iso --mode ${{ matrix.mode }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: boot-test-logs
-          path: out/boot-test/
+          name: boot-test-logs-${{ matrix.mode }}
+          path: out/boot-test-${{ matrix.mode }}/*.log
 
   release:
     name: Publish release

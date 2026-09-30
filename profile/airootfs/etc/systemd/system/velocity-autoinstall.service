@@ -1,0 +1,17 @@
+[Unit]
+Description=Velocity unattended install (only with velocity.autoinstall on the kernel command line)
+ConditionKernelCommandLine=velocity.autoinstall
+After=network-online.target pacman-init.service getty@tty1.service systemd-resolved.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=TERM=linux
+Environment=NO_COLOR=1
+ExecStart=/usr/local/bin/velocity-autoinstall
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

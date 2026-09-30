@@ -1,0 +1,15 @@
+[Unit]
+Description=Velocity first-boot install test (CI only)
+After=network.target getty@tty1.service systemd-user-sessions.service
+ConditionPathExists=/usr/local/bin/velocity-installtest
+
+[Service]
+Type=oneshot
+Environment=TERM=linux
+Environment=NO_COLOR=1
+ExecStart=/usr/local/bin/velocity-installtest
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

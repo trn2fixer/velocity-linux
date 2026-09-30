@@ -24,4 +24,7 @@ file_permissions=(
   ["/usr/local/bin/livecd-sound"]="0:0:755"
   ["/usr/local/bin/Installation_guide"]="0:0:755"
   ["/usr/local/bin/velocity-selftest"]="0:0:755"
+  ["/usr/local/bin/velocity-autoinstall"]="0:0:755"
+  ["/etc/velocity/ci/post-install.sh"]="0:0:755"
+  ["/etc/velocity/ci/velocity-installtest"]="0:0:755"
 )

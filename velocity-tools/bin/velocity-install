@@ -44,6 +44,8 @@ V_BUNDLES="${V_BUNDLES:-}"               # space list
 V_THEME="${V_THEME:-night}"
 V_SHELL="${V_SHELL:-zsh}"
 V_KERNEL="${V_KERNEL:-linux}"            # linux | linux-lts | linux-zen
+V_AUTOCONFIRM="${V_AUTOCONFIRM:-no}"     # yes -> no "are you sure" prompts, no reboot prompt (unattended)
+V_POST_SCRIPT="${V_POST_SCRIPT:-}"       # optional script run after install, target still mounted (TARGET env)
 V_MICROCODE=""
 V_UEFI=0
 
@@ -87,7 +89,7 @@ preflight() {
   ok "firmware: $([[ ${V_UEFI} -eq 1 ]] && echo UEFI || echo BIOS)"
   if ! curl -fsI --max-time 6 https://archlinux.org >/dev/null 2>&1; then
     warn "no internet. Connect first: nmtui (Wi-Fi/Ethernet) or iwctl"
-    if ui_confirm "Open nmtui now?"; then nmtui; fi
+    if [[ "${V_AUTOCONFIRM}" != "yes" ]] && ui_confirm "Open nmtui now?"; then nmtui; fi
     curl -fsI --max-time 6 https://archlinux.org >/dev/null 2>&1 || die "still offline; aborting"
   fi
   ok "internet reachable"
@@ -219,6 +221,10 @@ EOF
     printf '\n%s%s%s will be formatted.%s\n' "${C_BOLD}" "${C_RED}" "${V_ROOT_PART}" "${C_RESET}"
   fi
   [[ ${DRY_RUN} -eq 1 ]] && { ok "dry run: stopping here"; exit 0; }
+  if [[ "${V_AUTOCONFIRM}" == "yes" ]]; then
+    warn "V_AUTOCONFIRM=yes: proceeding without confirmation"
+    return 0
+  fi
   ui_confirm "Install Velocity Linux now?" || die "cancelled"
   if [[ "${V_DISK_MODE}" == "wipe" ]]; then
     local typed; typed="$(ui_input "Type the disk name to confirm (${V_DISK##*/}):")"
@@ -318,7 +324,7 @@ do_configure() {
   local ch=(arch-chroot "${TARGET}")
 
   run ln -sf "/usr/share/zoneinfo/${V_TIMEZONE}" "${TARGET}/etc/localtime"
-  run "${ch[@]}" hwclock --systohc
+  run "${ch[@]}" hwclock --systohc || warn "hwclock failed (no RTC?); continuing"
 
   run sed -i "s/^#\(${V_LOCALE//./\\.} UTF-8\)/\1/" "${TARGET}/etc/locale.gen"
   grep -q "^${V_LOCALE} UTF-8" "${TARGET}/etc/locale.gen" || echo "${V_LOCALE} UTF-8" >>"${TARGET}/etc/locale.gen"
@@ -397,6 +403,14 @@ do_bootloader() {
   fi
 }
 
+do_post_script() {
+  [[ -n "${V_POST_SCRIPT}" ]] || return 0
+  hdr "Post-install script"
+  [[ -r "${V_POST_SCRIPT}" ]] || die "V_POST_SCRIPT not readable: ${V_POST_SCRIPT}"
+  TARGET="${TARGET}" run bash "${V_POST_SCRIPT}"
+  ok "post-install script finished"
+}
+
 do_finish() {
   hdr "Done"
   # First-boot snapshot so users have a pristine restore point.
@@ -407,6 +421,7 @@ do_finish() {
   ok "Velocity Linux is installed on ${V_DISK}."
   dim "  Remove the USB stick, then reboot. Log in as ${V_USER}."
   dim "  Later: run 'velocity' to switch desktops, add bundles, change themes."
+  [[ "${V_AUTOCONFIRM}" == "yes" ]] && return 0
   if ui_confirm "Reboot now?"; then reboot; fi
 }
 
@@ -426,7 +441,7 @@ main() {
     source "${CONFIG}"
   fi
 
-  clear; ui_banner
+  clear 2>/dev/null || true; ui_banner
   preflight
   ask_region
   ask_disk
@@ -438,6 +453,7 @@ main() {
   do_configure
   do_presets
   do_bootloader
+  do_post_script
   do_finish
 }
 

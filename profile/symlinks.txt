@@ -28,3 +28,4 @@ root/.zshrc       /etc/velocity/live/zshrc
 # --- live medium: never prompt for first-boot setup ---
 etc/systemd/system/systemd-firstboot.service   /dev/null
 etc/localtime                                   /usr/share/zoneinfo/UTC
+etc/systemd/system/multi-user.target.wants/velocity-autoinstall.service  /etc/systemd/system/velocity-autoinstall.service
