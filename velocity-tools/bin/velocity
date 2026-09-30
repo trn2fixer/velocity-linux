@@ -39,7 +39,9 @@ cmd_desktop() {
       preset_apply desktop "${id}" "$@"
       # Apply the current theme to the new desktop, if one is set.
       local th; th="$(state_get theme)"
-      [[ -n "${th}" ]] && preset_apply theme "${th}" --no-optional
+      if [[ -n "${th}" ]]; then
+        preset_apply theme "${th}" --no-optional
+      fi
       ;;
     *) die "desktop: unknown action '${action}'" ;;
   esac
@@ -222,7 +224,7 @@ menu() {
       Bundles)
         local ids; mapfile -t ids < <(preset_ids bundle)
         local sel; mapfile -t sel < <(ui_multi "Bundles to add:" "${ids[@]}")
-        [[ ${#sel[@]} -gt 0 ]] && cmd_bundle add "${sel[@]}" ;;
+        if [[ ${#sel[@]} -gt 0 ]]; then cmd_bundle add "${sel[@]}"; fi ;;
       Theme)
         local ids; mapfile -t ids < <(preset_ids theme)
         local id; id="$(ui_choose "Theme:" "${ids[@]}")" || continue

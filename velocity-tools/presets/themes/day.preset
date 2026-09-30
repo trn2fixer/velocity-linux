@@ -81,4 +81,5 @@ EOF
 EOF
       ;;
   esac
+  return 0
 }

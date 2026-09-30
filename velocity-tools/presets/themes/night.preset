@@ -83,5 +83,5 @@ EOF
 EOF
       ;;
   esac
-  # Console/tty colours via starship stay the same in both themes.
+  return 0
 }
